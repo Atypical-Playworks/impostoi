@@ -1,4 +1,7 @@
 export const MATCH_ROUNDS = 3;
+export const CLUE_PHASE_TIMEOUT_MS = 20_000;
+export const DISCUSSION_TIMEOUT_MS = 60_000;
+export const VOTING_TIMEOUT_MS = 20_000;
 
 export type MatchPhase =
   | "lobby"
@@ -38,6 +41,7 @@ export type GameState = {
   readonly hostId: string;
   readonly roundNumber: number;
   readonly phase: MatchPhase;
+  readonly phaseDeadlineAt?: number;
   readonly votingStage?: VotingStage;
   readonly participants: readonly Participant[];
   readonly round: PrivateRound;
@@ -95,8 +99,18 @@ function requirePhase(state: GameState, phase: MatchPhase): void {
   if (state.phase !== phase) throw new GameStateError("invalid-phase");
 }
 
+function requirePhaseOpen(state: GameState, now: number): void {
+  if (state.phaseDeadlineAt !== undefined && now >= state.phaseDeadlineAt) {
+    throw new GameStateError("phase-timeout");
+  }
+}
+
 function copyState(state: GameState, changes: Partial<GameState>): GameState {
   return { ...state, ...changes };
+}
+
+function deadlineAfter(now: number, durationMs: number): number {
+  return now + durationMs;
 }
 
 function tally(
@@ -186,19 +200,28 @@ export function createGame(input: CreateGameInput): GameState {
   };
 }
 
-export function startCluePhase(state: GameState, actorId: string): GameState {
+export function startCluePhase(
+  state: GameState,
+  actorId: string,
+  now = Date.now(),
+): GameState {
   requireHost(state, actorId);
   requirePhase(state, "lobby");
-  return copyState(state, { phase: "clue_phase" });
+  return copyState(state, {
+    phase: "clue_phase",
+    phaseDeadlineAt: deadlineAfter(now, CLUE_PHASE_TIMEOUT_MS),
+  });
 }
 
 export function submitClue(
   state: GameState,
   actorId: string,
   text: string,
+  now = Date.now(),
 ): GameState {
   requireParticipant(state, actorId);
   requirePhase(state, "clue_phase");
+  requirePhaseOpen(state, now);
   if (!text.trim()) throw new GameStateError("invalid-clue");
   if (state.round.clues.has(actorId))
     throw new GameStateError("duplicate-clue");
@@ -207,25 +230,36 @@ export function submitClue(
   return copyState(state, { round: { ...state.round, clues } });
 }
 
-export function startDiscussion(state: GameState, actorId: string): GameState {
+export function startDiscussion(
+  state: GameState,
+  actorId: string,
+  now = Date.now(),
+): GameState {
   requireHost(state, actorId);
   requirePhase(state, "clue_phase");
+  requirePhaseOpen(state, now);
   if (!allSubmitted(state, state.round.clues))
     throw new GameStateError("clues-incomplete");
-  return copyState(state, { phase: "discussion" });
+  return copyState(state, {
+    phase: "discussion",
+    phaseDeadlineAt: deadlineAfter(now, DISCUSSION_TIMEOUT_MS),
+  });
 }
 
 export function startVoting(
   state: GameState,
   actorId: string,
   discussion: string,
+  now = Date.now(),
 ): GameState {
   requireHost(state, actorId);
   requirePhase(state, "discussion");
+  requirePhaseOpen(state, now);
   return copyState(state, {
     phase: "voting",
     votingStage: "ai_detection",
     discussion: discussion.trim(),
+    phaseDeadlineAt: deadlineAfter(now, VOTING_TIMEOUT_MS),
   });
 }
 
@@ -233,9 +267,11 @@ export function submitVote(
   state: GameState,
   actorId: string,
   targetId: string,
+  now = Date.now(),
 ): GameState {
   requireParticipant(state, actorId);
   requirePhase(state, "voting");
+  requirePhaseOpen(state, now);
   requireParticipant(state, targetId);
   const stage = state.votingStage ?? "ai_detection";
   const votes = new Map(state.round.votes[stage]);
@@ -247,15 +283,63 @@ export function submitVote(
   };
   if (!allSubmitted(state, votes)) return copyState(state, { round });
   if (stage === "ai_detection") {
-    return copyState(state, { round, votingStage: "impostor" });
+    return copyState(state, {
+      round,
+      votingStage: "impostor",
+      phaseDeadlineAt: deadlineAfter(now, VOTING_TIMEOUT_MS),
+    });
   }
-  return copyState(state, { round, phase: "reveal", votingStage: undefined });
+  return copyState(state, {
+    round,
+    phase: "reveal",
+    votingStage: undefined,
+    phaseDeadlineAt: undefined,
+  });
+}
+
+export function advanceTimedOutPhase(
+  state: GameState,
+  now = Date.now(),
+): GameState {
+  if (state.phaseDeadlineAt === undefined || now < state.phaseDeadlineAt) {
+    return state;
+  }
+
+  switch (state.phase) {
+    case "clue_phase":
+      return copyState(state, {
+        phase: "discussion",
+        phaseDeadlineAt: deadlineAfter(now, DISCUSSION_TIMEOUT_MS),
+      });
+    case "discussion":
+      return copyState(state, {
+        phase: "voting",
+        votingStage: "ai_detection",
+        phaseDeadlineAt: deadlineAfter(now, VOTING_TIMEOUT_MS),
+      });
+    case "voting":
+      if (state.votingStage === "ai_detection") {
+        return copyState(state, {
+          votingStage: "impostor",
+          phaseDeadlineAt: deadlineAfter(now, VOTING_TIMEOUT_MS),
+        });
+      }
+      return copyState(state, {
+        phase: "reveal",
+        votingStage: undefined,
+        phaseDeadlineAt: undefined,
+      });
+    case "lobby":
+    case "reveal":
+    case "results":
+      return state;
+  }
 }
 
 export function showResults(state: GameState, actorId: string): GameState {
   requireHost(state, actorId);
   requirePhase(state, "reveal");
-  return copyState(state, { phase: "results" });
+  return copyState(state, { phase: "results", phaseDeadlineAt: undefined });
 }
 
 export function viewFor(state: GameState, viewerId: string): PrivateGameView {

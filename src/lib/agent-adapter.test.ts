@@ -6,8 +6,9 @@ import type {
   AgentRequest,
   GenerateStructuredObject,
 } from "@/lib/agent-adapter-config";
-
-const { createAgentAdapter } = await import("@/lib/agent-adapter-config");
+const { agentReplayEvent, createAgentAdapter } = await import(
+  "@/lib/agent-adapter-config"
+);
 
 const request: AgentRequest = {
   action: "clue",
@@ -133,6 +134,11 @@ describe("OpenCode Zen Agent adapter", () => {
     expect(result.metadata.fallback).toBe(true);
     expect(result.output).toEqual({
       text: "Mantendré mi pista relacionada con la categoría.",
+    });
+    expect(agentReplayEvent(result)).toEqual({
+      event_type: "agent_action",
+      payload: { action: "clue", fallback: true },
+      duration_ms: expect.any(Number),
     });
   });
 

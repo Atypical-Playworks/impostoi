@@ -43,6 +43,15 @@ export type AgentResult = {
   };
 };
 
+export type AgentReplayEvent = {
+  readonly event_type: "agent_action";
+  readonly payload: {
+    readonly action: AgentAction;
+    readonly fallback: boolean;
+  };
+  readonly duration_ms: number;
+};
+
 type StructuredObjectArgs = {
   model: Parameters<typeof generateObject>[0]["model"];
   schema: z.ZodType;
@@ -124,6 +133,14 @@ function promptFor(request: AgentRequest): string {
     clues: request.clues,
     discussion: request.discussion,
   });
+}
+
+export function agentReplayEvent(result: AgentResult): AgentReplayEvent {
+  return {
+    event_type: "agent_action",
+    payload: { action: result.action, fallback: result.metadata.fallback },
+    duration_ms: result.metadata.responseTimeMs,
+  };
 }
 
 export function createAgentAdapter(
