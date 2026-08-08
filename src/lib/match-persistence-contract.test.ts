@@ -13,6 +13,13 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const statisticsMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260808020000_agent_statistics.sql",
+  ),
+  "utf8",
+);
 
 test("match persistence migration stores complete match history", () => {
   for (const table of [
@@ -38,6 +45,7 @@ test("match persistence migration stores complete match history", () => {
     "create or replace function public.purge_expired_replays()",
   );
   expect(migration).toContain("revoke all on function public.load_match");
+  expect(migration).toContain("record_agent_statistics(match_payload)");
 });
 
 test("match persistence protects private history with participant-scoped RLS", () => {
@@ -61,6 +69,27 @@ test("match persistence protects private history with participant-scoped RLS", (
   );
   expect(migration).toContain(
     "grant execute on function public.migrate_guest_progress(uuid, uuid)",
+  );
+});
+
+test("Agent statistics expose direct competitive metrics and progress counters", () => {
+  expect(statisticsMigration).toContain(
+    "create table public.agent_match_statistics",
+  );
+  expect(statisticsMigration).toContain("create or replace view public.agent_rankings");
+  expect(statisticsMigration).toContain("camouflage_inconclusive");
+  expect(statisticsMigration).toContain("impostor_inconclusive");
+  expect(statisticsMigration).toContain("fallback_match");
+  expect(statisticsMigration).toContain("grant select on public.agent_rankings");
+  expect(statisticsMigration).toContain("player_progress");
+  expect(statisticsMigration).not.toContain(
+    'create policy "Anyone can read competitive Agent statistics"',
+  );
+  expect(statisticsMigration).toContain(
+    "ai_detection_attempts = player_progress.ai_detection_attempts + excluded.ai_detection_attempts",
+  );
+  expect(statisticsMigration).toContain(
+    "impostor_successes = player_progress.impostor_successes + excluded.impostor_successes",
   );
 });
 

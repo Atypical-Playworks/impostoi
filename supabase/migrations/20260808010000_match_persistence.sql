@@ -286,9 +286,11 @@ begin
 
   insert into public.public_match_summaries (match_id, rounds_played, fallback_match, summary)
   select saved_match_id, rounds_played, fallback_match, summary
-  from jsonb_to_record(match_payload -> 'public_summary') as x(
-    rounds_played integer, fallback_match boolean, summary jsonb
-  );
+    from jsonb_to_record(match_payload -> 'public_summary') as x(
+      rounds_played integer, fallback_match boolean, summary jsonb
+    );
+
+  perform public.record_agent_statistics(match_payload);
 
   return saved_match_id;
 end;
