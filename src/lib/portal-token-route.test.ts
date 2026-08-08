@@ -11,7 +11,7 @@ describe("Portal token route contract", () => {
   test("keeps the Portal secret server-side and scopes tokens to a room", () => {
     expect(route).toContain('"@/lib/server-env-config"');
     expect(route).toContain("config.portalSecret");
-    expect(route).toContain("channelId: roomChannelId(body.roomId)");
+    expect(route).toContain("const channelId = roomChannelId(body.roomId)");
     expect(route).not.toContain("NEXT_PUBLIC_PORTAL");
   });
 
@@ -20,5 +20,7 @@ describe("Portal token route contract", () => {
     expect(route).toContain("status: 400");
     expect(route).toContain("status: 503");
     expect(route).toContain('error: "room-unavailable"');
+    expect(route).toContain("!isRecord(body)");
+    expect(route).toContain("await response.json()");
   });
 });

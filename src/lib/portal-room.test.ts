@@ -27,6 +27,15 @@ describe("Portal room lifecycle", () => {
       avatar: "avatar-1",
       activity: "clue",
     });
+    const invalidMetadata = { alias: "Ana", avatar: "sun" };
+    Object.defineProperty(invalidMetadata, "activity", {
+      value: "private-role",
+    });
+    expect(safePresence("user-1", invalidMetadata)).toEqual({
+      id: "user-1",
+      alias: "Ana",
+      avatar: "sun",
+    });
   });
 
   test("bounds reconnects and preserves a late-join snapshot contract", () => {
@@ -51,6 +60,16 @@ describe("Portal room lifecycle", () => {
       phase: "lobby",
       participants: [{ id: "user-1", alias: "Ana", avatar: "sun" }],
     });
+    expect(() =>
+      createRoomSnapshot({
+        roomId: "abc",
+        channelId: "xroom-abc",
+        status: "ready",
+        phase: "lobby",
+        participants: [],
+        receivedAt: 10,
+      }),
+    ).toThrow("channel mismatch");
   });
 
   test("maps Portal failures to safe user-facing states", () => {

@@ -4,7 +4,9 @@ import { roomChannelId, validateRoomId } from "@/lib/portal-room";
 import { readServerRuntimeConfig } from "@/lib/server-env-config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-type TokenResponse = { token?: unknown };
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();
@@ -16,17 +18,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "session-expired" }, { status: 401 });
   }
 
-  let body: { roomId?: unknown };
+  let body: unknown;
   try {
-    body = (await request.json()) as { roomId?: unknown };
+    body = await request.json();
   } catch {
     return NextResponse.json({ error: "invalid-room" }, { status: 400 });
   }
 
-  if (typeof body.roomId !== "string" || !validateRoomId(body.roomId)) {
+  if (
+    !isRecord(body) ||
+    typeof body.roomId !== "string" ||
+    !validateRoomId(body.roomId)
+  ) {
     return NextResponse.json({ error: "invalid-room" }, { status: 400 });
   }
 
+  const channelId = roomChannelId(body.roomId);
   const config = readServerRuntimeConfig();
   let response: Response;
   try {
@@ -38,7 +45,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         userId: user.id,
-        channelId: roomChannelId(body.roomId),
+        channelId,
       }),
       cache: "no-store",
     });
@@ -51,13 +58,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "room-unavailable" }, { status });
   }
 
-  const payload = (await response.json()) as TokenResponse;
-  if (typeof payload.token !== "string" || payload.token.length === 0) {
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return NextResponse.json({ error: "room-unavailable" }, { status: 502 });
+  }
+
+  if (
+    !isRecord(payload) ||
+    typeof payload.token !== "string" ||
+    payload.token.length === 0
+  ) {
     return NextResponse.json({ error: "room-unavailable" }, { status: 502 });
   }
 
   return NextResponse.json({
     token: payload.token,
-    channelId: roomChannelId(body.roomId),
+    channelId,
   });
 }

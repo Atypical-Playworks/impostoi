@@ -46,11 +46,25 @@ export function safePresence(
   id: string,
   metadata: Partial<PresenceMetadata>,
 ): PresenceMetadata & { id: string } {
+  const activity =
+    metadata.activity === "idle" ||
+    metadata.activity === "clue" ||
+    metadata.activity === "discussion" ||
+    metadata.activity === "voting"
+      ? metadata.activity
+      : undefined;
+
   return {
     id,
-    alias: metadata.alias?.slice(0, 24) || "Jugador",
-    avatar: metadata.avatar?.slice(0, 64) || "default",
-    ...(metadata.activity ? { activity: metadata.activity } : {}),
+    alias:
+      typeof metadata.alias === "string"
+        ? metadata.alias.slice(0, 24) || "Jugador"
+        : "Jugador",
+    avatar:
+      typeof metadata.avatar === "string"
+        ? metadata.avatar.slice(0, 64) || "default"
+        : "default",
+    ...(activity ? { activity } : {}),
   };
 }
 
@@ -62,7 +76,10 @@ export function canReconnect(
 }
 
 export function createRoomSnapshot(input: RoomSnapshot): RoomSnapshot {
-  if (input.roomId !== input.channelId.slice("room-".length)) {
+  if (
+    !input.channelId.startsWith("room-") ||
+    input.roomId !== input.channelId.slice("room-".length)
+  ) {
     throw new Error("Room snapshot channel mismatch");
   }
 
