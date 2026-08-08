@@ -35,6 +35,16 @@ describe("Cloud Run deployment contract", () => {
     );
   });
 
+  test("does not interpolate configuration secrets into the deploy shell", () => {
+    const deployStep = workflow.slice(workflow.indexOf("Deploy Cloud Run service"));
+
+    expect(deployStep).toContain("APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}");
+    expect(deployStep).toContain("NEXT_PUBLIC_APP_URL=$APP_URL");
+    expect(deployStep).not.toContain(
+      "NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}",
+    );
+  });
+
   test("documents required GitHub configuration and Google permissions", () => {
     for (const name of [
       "GCP_WORKLOAD_IDENTITY_PROVIDER",
