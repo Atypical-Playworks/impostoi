@@ -26,9 +26,8 @@ import {
   Zap,
 } from "lucide-react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
-
-import { RoundRoom } from "./round-room";
 
 type AuthMode = "anonymous" | "authenticated";
 
@@ -338,252 +337,237 @@ function Modal({
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const [authMode, setAuthMode] = useState<AuthMode>("anonymous");
   const [languageOpen, setLanguageOpen] = useState(false);
   const [modal, setModal] = useState<"create" | "join" | null>(null);
-  const [inRoom, setInRoom] = useState(false);
-  const [roomId, setRoomId] = useState("IMPOST");
   const howId = useId();
 
   return (
     <main className="game-shell">
-      {inRoom ? (
-        <RoundRoom roomId={roomId} onLeave={() => setInRoom(false)} />
-      ) : null}
-      {inRoom ? null : (
-        <>
-          <Doodles />
-          <div className="game-content">
-            <header className="site-header">
-              <div className="language-menu">
-                <button
-                  type="button"
-                  className="language-button"
-                  onClick={() => setLanguageOpen((open) => !open)}
-                  aria-expanded={languageOpen}
-                >
-                  <Globe2 size={18} /> ES{" "}
-                  <ChevronDown
-                    size={16}
-                    className={languageOpen ? "rotate" : ""}
-                  />
+      <Doodles />
+      <div className="game-content">
+        <header className="site-header">
+          <div className="language-menu">
+            <button
+              type="button"
+              className="language-button"
+              onClick={() => setLanguageOpen((open) => !open)}
+              aria-expanded={languageOpen}
+            >
+              <Globe2 size={18} /> ES{" "}
+              <ChevronDown size={16} className={languageOpen ? "rotate" : ""} />
+            </button>
+            {languageOpen ? (
+              <div className="language-dropdown">
+                <button type="button" className="selected">
+                  Espanol <Check size={15} />
                 </button>
-                {languageOpen ? (
-                  <div className="language-dropdown">
-                    <button type="button" className="selected">
-                      Espanol <Check size={15} />
-                    </button>
-                    <button type="button">English</button>
-                  </div>
-                ) : null}
+                <button type="button">English</button>
               </div>
-
-              <div className="auth-area">
-                <div
-                  className="auth-tabs"
-                  role="tablist"
-                  aria-label="Modo de acceso"
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={authMode === "anonymous"}
-                    className={
-                      authMode === "anonymous" ? "active anonymous" : ""
-                    }
-                    onClick={() => setAuthMode("anonymous")}
-                  >
-                    <span className="auth-avatar">
-                      <Avatar color="#21D4D4" label="?" />
-                    </span>{" "}
-                    Anonimo
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={authMode === "authenticated"}
-                    className={
-                      authMode === "authenticated" ? "active authenticated" : ""
-                    }
-                    onClick={() => setAuthMode("authenticated")}
-                  >
-                    <UserRound size={20} /> Autenticado
-                  </button>
-                </div>
-                <div className="online-pill">
-                  <span className="online-dot" />
-                  <strong>12</strong> jugando ahora
-                  <span className="mini-avatars">
-                    <Avatar color="#F43FA7" />
-                    <Avatar color="#FFD43B" />
-                  </span>
-                </div>
-              </div>
-
-              <div className="brand-lockup">
-                <div className="logo-frame">
-                  <Image
-                    src="/impostoi-logo.png"
-                    alt="impostoi"
-                    className="brand-logo"
-                    width={1536}
-                    height={1024}
-                    priority
-                  />
-                </div>
-                <p className="tagline-main">Hoy alguien finge ser humano.</p>
-                <p className="tagline-secondary">
-                  Descubre a la <strong className="cyan-label">IA</strong>.
-                  Encuentra al <strong className="pink-label">impostoi</strong>.
-                </p>
-              </div>
-            </header>
-
-            <section className="hero-actions" aria-label="Acciones principales">
-              <button
-                type="button"
-                className="hero-button pink"
-                onClick={() => setModal("create")}
-              >
-                <span className="hero-icon yellow">
-                  <span className="smile-face">• •</span>
-                </span>
-                <span className="hero-copy">
-                  <strong>Crear sala</strong>
-                  <small>Se el anfitrion</small>
-                </span>
-                <span className="arrow-box">
-                  <ArrowRight size={28} />
-                </span>
-              </button>
-              <button
-                type="button"
-                className="hero-button cyan"
-                onClick={() => setModal("join")}
-              >
-                <span className="hero-icon cyan-icon">
-                  <Users size={34} />
-                </span>
-                <span className="hero-copy">
-                  <strong>Unirse a una sala</strong>
-                  <small>Con codigo de sala</small>
-                </span>
-                <span className="arrow-box">
-                  <ArrowRight size={28} />
-                </span>
-              </button>
-            </section>
-
-            <div className="info-bar">
-              <span>
-                <Users size={20} /> 4-5 jugadores + 1 IA oculta
-              </span>
-              <i />
-              <span>
-                <Clock3 size={20} /> Partidas de 3 rondas
-              </span>
-              <i />
-              <span>
-                <Zap size={20} /> Diversion asegurada
-              </span>
-            </div>
-
-            <section className="how-section" aria-labelledby={howId}>
-              <div className="section-title">
-                <b /> <h2 id={howId}>Como se juega?</h2> <b />
-              </div>
-              <div className="steps-row">
-                {steps.map((step, index) => {
-                  const Icon = step.icon;
-                  return (
-                    <div className="step-wrap" key={step.title}>
-                      <div className="step-item">
-                        <div
-                          className="step-circle"
-                          style={{
-                            backgroundColor: step.color,
-                            boxShadow: `0 5px 0 ${step.shadow}`,
-                          }}
-                        >
-                          <span
-                            className="step-number"
-                            style={{ backgroundColor: step.color }}
-                          >
-                            {index + 1}
-                          </span>
-                          <Icon size={30} />
-                        </div>
-                        <strong>{step.title}</strong>
-                        <small>{step.subtitle}</small>
-                      </div>
-                      {index < steps.length - 1 ? (
-                        <ChevronRight className="step-arrow" size={23} />
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            <footer className="footer-panel">
-              <div className="footer-message">
-                <span className="star-badge">
-                  <Star size={20} fill="currentColor" />
-                </span>
-                <p>
-                  Cada partida es unica.
-                  <br />
-                  <em>Cada mente es un misterio.</em>
-                </p>
-              </div>
-              <div className="footer-avatars">
-                <div>
-                  <strong>Avatares divertidos</strong>
-                  <small>Todos juegan con alias aleatorios.</small>
-                </div>
-                <div className="avatar-row">
-                  {palette.map((color) => (
-                    <Avatar key={color} color={color} />
-                  ))}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="footer-cta"
-                onClick={() => setModal("create")}
-              >
-                <span>
-                  Listo para descubrir
-                  <br />
-                  <strong>al impostoi?</strong>
-                </span>
-                <ArrowUpRight size={23} color="var(--cyan)" />
-              </button>
-            </footer>
+            ) : null}
           </div>
 
-          {modal === "create" ? (
-            <CreateRoomModal
-              onClose={() => setModal(null)}
-              onEnter={(nextRoomId) => {
-                setModal(null);
-                setRoomId(nextRoomId);
-                setInRoom(true);
-              }}
-            />
-          ) : null}
-          {modal === "join" ? (
-            <JoinRoomModal
-              onClose={() => setModal(null)}
-              onEnter={(nextRoomId) => {
-                setModal(null);
-                setRoomId(nextRoomId);
-                setInRoom(true);
-              }}
-            />
-          ) : null}
-        </>
-      )}
+          <div className="auth-area">
+            <div
+              className="auth-tabs"
+              role="tablist"
+              aria-label="Modo de acceso"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={authMode === "anonymous"}
+                className={authMode === "anonymous" ? "active anonymous" : ""}
+                onClick={() => setAuthMode("anonymous")}
+              >
+                <span className="auth-avatar">
+                  <Avatar color="#21D4D4" label="?" />
+                </span>{" "}
+                Anonimo
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={authMode === "authenticated"}
+                className={
+                  authMode === "authenticated" ? "active authenticated" : ""
+                }
+                onClick={() => setAuthMode("authenticated")}
+              >
+                <UserRound size={20} /> Autenticado
+              </button>
+            </div>
+            <div className="online-pill">
+              <span className="online-dot" />
+              <strong>12</strong> jugando ahora
+              <span className="mini-avatars">
+                <Avatar color="#F43FA7" />
+                <Avatar color="#FFD43B" />
+              </span>
+            </div>
+          </div>
+
+          <div className="brand-lockup">
+            <div className="logo-frame">
+              <Image
+                src="/impostoi-logo.png"
+                alt="impostoi"
+                className="brand-logo"
+                width={1536}
+                height={1024}
+                priority
+              />
+            </div>
+            <p className="tagline-main">Hoy alguien finge ser humano.</p>
+            <p className="tagline-secondary">
+              Descubre a la <strong className="cyan-label">IA</strong>.
+              Encuentra al <strong className="pink-label">impostoi</strong>.
+            </p>
+          </div>
+        </header>
+
+        <section className="hero-actions" aria-label="Acciones principales">
+          <button
+            type="button"
+            className="hero-button pink"
+            onClick={() => setModal("create")}
+          >
+            <span className="hero-icon yellow">
+              <span className="smile-face">• •</span>
+            </span>
+            <span className="hero-copy">
+              <strong>Crear sala</strong>
+              <small>Se el anfitrion</small>
+            </span>
+            <span className="arrow-box">
+              <ArrowRight size={28} />
+            </span>
+          </button>
+          <button
+            type="button"
+            className="hero-button cyan"
+            onClick={() => setModal("join")}
+          >
+            <span className="hero-icon cyan-icon">
+              <Users size={34} />
+            </span>
+            <span className="hero-copy">
+              <strong>Unirse a una sala</strong>
+              <small>Con codigo de sala</small>
+            </span>
+            <span className="arrow-box">
+              <ArrowRight size={28} />
+            </span>
+          </button>
+        </section>
+
+        <div className="info-bar">
+          <span>
+            <Users size={20} /> 4-5 jugadores + 1 IA oculta
+          </span>
+          <i />
+          <span>
+            <Clock3 size={20} /> Partidas de 3 rondas
+          </span>
+          <i />
+          <span>
+            <Zap size={20} /> Diversion asegurada
+          </span>
+        </div>
+
+        <section className="how-section" aria-labelledby={howId}>
+          <div className="section-title">
+            <b /> <h2 id={howId}>Como se juega?</h2> <b />
+          </div>
+          <div className="steps-row">
+            {steps.map((step, index) => {
+              const Icon = step.icon;
+              return (
+                <div className="step-wrap" key={step.title}>
+                  <div className="step-item">
+                    <div
+                      className="step-circle"
+                      style={{
+                        backgroundColor: step.color,
+                        boxShadow: `0 5px 0 ${step.shadow}`,
+                      }}
+                    >
+                      <span
+                        className="step-number"
+                        style={{ backgroundColor: step.color }}
+                      >
+                        {index + 1}
+                      </span>
+                      <Icon size={30} />
+                    </div>
+                    <strong>{step.title}</strong>
+                    <small>{step.subtitle}</small>
+                  </div>
+                  {index < steps.length - 1 ? (
+                    <ChevronRight className="step-arrow" size={23} />
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <footer className="footer-panel">
+          <div className="footer-message">
+            <span className="star-badge">
+              <Star size={20} fill="currentColor" />
+            </span>
+            <p>
+              Cada partida es unica.
+              <br />
+              <em>Cada mente es un misterio.</em>
+            </p>
+          </div>
+          <div className="footer-avatars">
+            <div>
+              <strong>Avatares divertidos</strong>
+              <small>Todos juegan con alias aleatorios.</small>
+            </div>
+            <div className="avatar-row">
+              {palette.map((color) => (
+                <Avatar key={color} color={color} />
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="footer-cta"
+            onClick={() => setModal("create")}
+          >
+            <span>
+              Listo para descubrir
+              <br />
+              <strong>al impostoi?</strong>
+            </span>
+            <ArrowUpRight size={23} color="var(--cyan)" />
+          </button>
+        </footer>
+      </div>
+
+      {modal === "create" ? (
+        <CreateRoomModal
+          onClose={() => setModal(null)}
+          onEnter={(nextRoomId) => {
+            setModal(null);
+            router.push(`/room/${nextRoomId}`);
+          }}
+        />
+      ) : null}
+      {modal === "join" ? (
+        <JoinRoomModal
+          onClose={() => setModal(null)}
+          onEnter={(nextRoomId) => {
+            setModal(null);
+            router.push(`/room/${nextRoomId}`);
+          }}
+        />
+      ) : null}
     </main>
   );
 }
