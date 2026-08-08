@@ -124,7 +124,7 @@ function CreateRoomModal({
   onEnter,
 }: {
   onClose: () => void;
-  onEnter: () => void;
+  onEnter: (roomId: string) => void;
 }) {
   const [created, setCreated] = useState(false);
   const [code] = useState("IMPOST");
@@ -187,7 +187,11 @@ function CreateRoomModal({
           <h3>Sala lista</h3>
           <p>Comparte el codigo para que tus amigos se unan.</p>
           <strong className="success-code">{code}</strong>
-          <button type="button" className="modal-primary" onClick={onEnter}>
+          <button
+            type="button"
+            className="modal-primary"
+            onClick={() => onEnter(code)}
+          >
             Ir a la sala de espera
           </button>
         </div>
@@ -201,7 +205,7 @@ function JoinRoomModal({
   onEnter,
 }: {
   onClose: () => void;
-  onEnter: () => void;
+  onEnter: (roomId: string) => void;
 }) {
   const [code, setCode] = useState("IMPOST");
   const [joined, setJoined] = useState(false);
@@ -278,7 +282,7 @@ function JoinRoomModal({
           <button
             type="button"
             className="modal-primary cyan"
-            onClick={onEnter}
+            onClick={() => onEnter(code)}
           >
             Ir a la sala de espera
           </button>
@@ -338,11 +342,14 @@ export default function HomePage() {
   const [languageOpen, setLanguageOpen] = useState(false);
   const [modal, setModal] = useState<"create" | "join" | null>(null);
   const [inRoom, setInRoom] = useState(false);
+  const [roomId, setRoomId] = useState("IMPOST");
   const howId = useId();
 
   return (
     <main className="game-shell">
-      {inRoom ? <RoundRoom onLeave={() => setInRoom(false)} /> : null}
+      {inRoom ? (
+        <RoundRoom roomId={roomId} onLeave={() => setInRoom(false)} />
+      ) : null}
       {inRoom ? null : (
         <>
           <Doodles />
@@ -558,8 +565,9 @@ export default function HomePage() {
           {modal === "create" ? (
             <CreateRoomModal
               onClose={() => setModal(null)}
-              onEnter={() => {
+              onEnter={(nextRoomId) => {
                 setModal(null);
+                setRoomId(nextRoomId);
                 setInRoom(true);
               }}
             />
@@ -567,8 +575,9 @@ export default function HomePage() {
           {modal === "join" ? (
             <JoinRoomModal
               onClose={() => setModal(null)}
-              onEnter={() => {
+              onEnter={(nextRoomId) => {
                 setModal(null);
+                setRoomId(nextRoomId);
                 setInRoom(true);
               }}
             />

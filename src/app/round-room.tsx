@@ -118,7 +118,14 @@ export function RoundRoom({
     };
   }, [roomId]);
 
-  if (setup.status === "fallback") return <DemoRoundRoom onLeave={onLeave} />;
+  if (setup.status === "fallback") {
+    return (
+      <RoundConnection
+        onLeave={onLeave}
+        label="Configura las variables publicas para conectar la sala"
+      />
+    );
+  }
   if (setup.status === "loading") {
     return (
       <RoundConnection onLeave={onLeave} label="Conectando con la sala..." />
@@ -362,7 +369,7 @@ function LiveRoundRoom({
   );
 }
 
-function DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
+function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
   const [phase, setPhase] = useState<MatchPhase>("lobby");
   const [votingStage, setVotingStage] = useState<VotingStage>("ai_detection");
   const [clue, setClue] = useState("");
