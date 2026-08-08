@@ -6,6 +6,7 @@ import type {
   AgentRequest,
   GenerateStructuredObject,
 } from "@/lib/agent-adapter-config";
+
 const { agentReplayEvent, createAgentAdapter } = await import(
   "@/lib/agent-adapter-config"
 );

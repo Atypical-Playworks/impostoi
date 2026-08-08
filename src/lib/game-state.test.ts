@@ -173,7 +173,7 @@ describe("server-authoritative game state", () => {
   });
 
   test("advances timed-out phases so a disconnected participant cannot block", () => {
-    let state = readyGame();
+    const state = readyGame();
     expect(state.phaseDeadlineAt).toBeDefined();
 
     const discussion = advanceTimedOutPhase(

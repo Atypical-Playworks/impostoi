@@ -182,32 +182,32 @@ const completed = settled.flatMap((outcome) =>
     : [],
 );
 
-  for (const outcome of settled) {
-    if (outcome.status === "rejected") {
-      console.error("Pipeline failed:", outcome.reason);
-      const failedIssue = issues[settled.indexOf(outcome)];
-      if (failedIssue) {
-        await exec("gh", [
-          "issue",
-          "comment",
-          failedIssue.id,
-          "--repo",
-          "Atypical-Playworks/impostoi",
-          "--body",
-          `Sandcastle blocked this issue and will not retry it automatically: ${String(outcome.reason)}`,
-        ]);
-        await exec("gh", [
-          "issue",
-          "edit",
-          failedIssue.id,
-          "--repo",
-          "Atypical-Playworks/impostoi",
-          "--remove-label",
-          "ready-for-agent",
-        ]);
-      }
+for (const outcome of settled) {
+  if (outcome.status === "rejected") {
+    console.error("Pipeline failed:", outcome.reason);
+    const failedIssue = issues[settled.indexOf(outcome)];
+    if (failedIssue) {
+      await exec("gh", [
+        "issue",
+        "comment",
+        failedIssue.id,
+        "--repo",
+        "Atypical-Playworks/impostoi",
+        "--body",
+        `Sandcastle blocked this issue and will not retry it automatically: ${String(outcome.reason)}`,
+      ]);
+      await exec("gh", [
+        "issue",
+        "edit",
+        failedIssue.id,
+        "--repo",
+        "Atypical-Playworks/impostoi",
+        "--remove-label",
+        "ready-for-agent",
+      ]);
     }
   }
+}
 
 if (completed.length > 0) {
   await sandcastle.run({
