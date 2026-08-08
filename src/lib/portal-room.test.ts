@@ -3,7 +3,10 @@ import { describe, expect, test } from "bun:test";
 import {
   canReconnect,
   createRoomSnapshot,
+  joinRoom,
+  leaveRoom,
   mapPortalError,
+  reconnectRoom,
   roomChannelId,
   safePresence,
 } from "./portal-room";
@@ -70,6 +73,65 @@ describe("Portal room lifecycle", () => {
         receivedAt: 10,
       }),
     ).toThrow("channel mismatch");
+  });
+
+  test("joins and leaves participants using safe presence metadata", () => {
+    const snapshot = createRoomSnapshot({
+      roomId: "abc",
+      channelId: "room-abc",
+      status: "ready",
+      phase: "lobby",
+      participants: [{ id: "user-1", alias: "Ana", avatar: "sun" }],
+      receivedAt: 10,
+    });
+
+    const joined = joinRoom(snapshot, {
+      id: "user-2",
+      alias: "B".repeat(30),
+      avatar: "moon",
+      activity: "discussion",
+    });
+    expect(joined.participants).toEqual([
+      { id: "user-1", alias: "Ana", avatar: "sun" },
+      {
+        id: "user-2",
+        alias: "B".repeat(24),
+        avatar: "moon",
+        activity: "discussion",
+      },
+    ]);
+
+    const replaced = joinRoom(joined, {
+      id: "user-2",
+      alias: "Bea",
+      avatar: "star",
+    });
+    expect(replaced.participants).toHaveLength(2);
+    expect(replaced.participants[1]).toEqual({
+      id: "user-2",
+      alias: "Bea",
+      avatar: "star",
+    });
+    expect(leaveRoom(replaced, "user-1").participants).toEqual([
+      { id: "user-2", alias: "Bea", avatar: "star" },
+    ]);
+  });
+
+  test("reconnects only while the bounded window is open", () => {
+    const snapshot = createRoomSnapshot({
+      roomId: "abc",
+      channelId: "room-abc",
+      status: "reconnecting",
+      phase: "discussion",
+      participants: [],
+      receivedAt: 10,
+    });
+    const participant = { id: "user-1", alias: "Ana", avatar: "sun" };
+
+    expect(reconnectRoom(snapshot, participant, 1_000, 31_000)).toMatchObject({
+      participants: [participant],
+    });
+    expect(reconnectRoom(snapshot, participant, 1_000, 31_001)).toBeNull();
   });
 
   test("maps Portal failures to safe user-facing states", () => {
