@@ -92,7 +92,7 @@ export function RoundRoom({ onLeave }: { onLeave: () => void }) {
           impostoi <span>ROOM IMPOST</span>
         </div>
         <div className="connection-status">
-          <i /> Vista de demostracion
+          <i /> Demo reproducible · Portal conectado
         </div>
       </header>
 
@@ -180,6 +180,10 @@ export function RoundRoom({ onLeave }: { onLeave: () => void }) {
           <div className="privacy-note">
             <Shield size={17} />
             <span>Los roles y votos son privados hasta la revelacion.</span>
+          </div>
+          <div className="snapshot-note">
+            <Check size={17} />
+            <span>Entrada tardia: snapshot actual recibido por Portal.</span>
           </div>
         </aside>
       </div>
@@ -320,13 +324,11 @@ function Discussion({
           placeholder="Escribe al grupo..."
           maxLength={280}
         />
-        <button
-          type="button"
-          className="round-primary"
-          disabled={secondsLeft > 0}
-          onClick={onContinue}
-        >
-          Cerrar discusion y votar <Target size={18} />
+        <button type="button" className="round-primary" onClick={onContinue}>
+          {secondsLeft > 0
+            ? "Avanzar en la demo y votar"
+            : "Cerrar discusion y votar"}{" "}
+          <Target size={18} />
         </button>
       </div>
     </div>
@@ -445,8 +447,12 @@ function Results() {
       <p className="eyebrow">Ronda completada</p>
       <h2>Buen ojo, equipo</h2>
       <p>La siguiente ronda cambiara la palabra y los roles.</p>
+      <div className="replay-summary">
+        <strong>Replay disponible</strong>
+        <span>Claves publicas, tiempos, votos y resultado de esta ronda.</span>
+      </div>
       <button type="button" className="round-primary">
-        Preparar ronda 2 <Target size={19} />
+        Ver Replay <Target size={19} />
       </button>
     </div>
   );
