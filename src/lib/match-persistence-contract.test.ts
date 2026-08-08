@@ -50,6 +50,11 @@ test("match persistence protects private history with participant-scoped RLS", (
   expect(migration).toContain(
     "alter table public.replays enable row level security",
   );
+  for (const table of ["rounds", "clues", "votes", "agent_events"]) {
+    expect(migration).toContain(
+      `create policy "Participants can read ${table}"`,
+    );
+  }
   expect(migration).toContain("auth.uid() = mp.player_id");
   expect(migration).toContain(
     "grant execute on function public.load_match(uuid)",

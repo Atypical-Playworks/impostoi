@@ -122,6 +122,44 @@ create policy "Participants can read their matches"
 create policy "Participants can read their identities"
   on public.match_participants for select using (player_id = auth.uid());
 
+create policy "Participants can read rounds"
+  on public.rounds for select using (
+    exists (
+      select 1 from public.match_participants mp
+      where mp.match_id = rounds.match_id and auth.uid() = mp.player_id
+    )
+  );
+
+create policy "Participants can read clues"
+  on public.clues for select using (
+    exists (
+      select 1
+      from public.rounds r
+      join public.match_participants mp on mp.match_id = r.match_id
+      where r.id = clues.round_id and auth.uid() = mp.player_id
+    )
+  );
+
+create policy "Participants can read votes"
+  on public.votes for select using (
+    exists (
+      select 1
+      from public.rounds r
+      join public.match_participants mp on mp.match_id = r.match_id
+      where r.id = votes.round_id and auth.uid() = mp.player_id
+    )
+  );
+
+create policy "Participants can read agent_events"
+  on public.agent_events for select using (
+    exists (
+      select 1
+      from public.rounds r
+      join public.match_participants mp on mp.match_id = r.match_id
+      where r.id = agent_events.round_id and auth.uid() = mp.player_id
+    )
+  );
+
 create policy "Participants can read their replays"
   on public.replays for select using (
     retention_expires_at > now() and exists (
