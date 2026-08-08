@@ -20,6 +20,12 @@ describe("live match Portal events", () => {
     expect(readLiveMatchView({ type: "snapshot", view })).toEqual(view);
     expect(readLiveMatchView({ type: "chat", view })).toBeNull();
     expect(
+      readLiveMatchView({
+        type: "state",
+        view: { ...view, participants: [{ id: "p1" }] },
+      }),
+    ).toBeNull();
+    expect(
       readLiveMatchView({ type: "state", view: { ...view, role: "secret" } }),
     ).toBeNull();
   });
@@ -29,6 +35,12 @@ describe("live match Portal events", () => {
       type: "action",
       action: "submit_clue",
       text: "bosque",
+    });
+    expect(
+      liveAction("submit_clue", { type: "spoof", action: "spoof" }),
+    ).toEqual({
+      type: "action",
+      action: "submit_clue",
     });
   });
 });
