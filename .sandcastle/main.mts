@@ -30,7 +30,6 @@ const sandboxProvider = () =>
 const agent = () =>
   sandcastle.opencode(MODEL, {
     agent: "build",
-    env: { GH_TOKEN: githubToken },
   });
 
 const hooks = {
