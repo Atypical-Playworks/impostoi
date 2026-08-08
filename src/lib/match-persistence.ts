@@ -29,6 +29,13 @@ export type CompletedMatchPayload = {
       readonly outcome: Record<string, unknown>;
       readonly completed_at: string;
     };
+    readonly statistics?: {
+      readonly agent_was_impostor: boolean;
+      readonly ai_detection: "detected" | "escaped" | "inconclusive";
+      readonly impostor_win: "won" | "lost" | "inconclusive";
+      readonly ai_votes: number;
+      readonly response_time_ms: number;
+    };
     readonly clues: readonly Record<string, unknown>[];
     readonly votes: readonly Record<string, unknown>[];
     readonly agent_events: readonly Record<string, unknown>[];
