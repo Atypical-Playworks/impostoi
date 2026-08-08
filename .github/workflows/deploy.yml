@@ -15,12 +15,37 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        env:
+          WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOYER_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+          DATABASE_URL_PROD: ${{ secrets.DATABASE_URL_PROD }}
+          APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          PORTAL_KEY: ${{ secrets.NEXT_PUBLIC_PORTAL_KEY }}
+        run: |
+          for required in \
+            WORKLOAD_IDENTITY_PROVIDER \
+            DEPLOYER_SERVICE_ACCOUNT \
+            DATABASE_URL_PROD \
+            APP_URL \
+            SUPABASE_URL \
+            SUPABASE_PUBLISHABLE_KEY \
+            PORTAL_KEY; do
+            test -n "${!required}" || { echo "Missing deployment configuration: $required"; exit 1; }
+          done
 
       - uses: google-github-actions/auth@v2
         with:
