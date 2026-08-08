@@ -1,0 +1,3093 @@
+# Quickstart
+
+Portal gives your app realtime channels and a per-user inbox over a single WebSocket,
+with reactive bindings for React. This page gets a chat-shaped channel on screen with
+zero backend, then shows what changes once you have real, identified users.
+
+## Install
+
+```bash
+npm install @portalsdk/core @portalsdk/react
+```
+
+`@portalsdk/react` has a peer dependency on `react` (`>=18 <20`).
+
+## Zero-backend: anonymous mode
+
+You don't need a backend, a token endpoint, or even a signed-up user to try Portal.
+Construct a client with just your publishable API key, and every user who loads the
+page gets a stable anonymous identity for free:
+
+```tsx
+import { Portal } from "@portalsdk/core";
+import { PortalProvider, useChannel } from "@portalsdk/react";
+
+// Construct once, at module scope. Construction is synchronous and passive —
+// nothing happens on the wire until a component actually mounts a channel.
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+
+interface ChatMessage {
+  text: string;
+}
+
+function ChatRoom() {
+  const { messages, send } = useChannel<ChatMessage>({ channelId: "lobby" });
+
+  return (
+    <div>
+      <ul>
+        {messages.map((m) => (
+          <li key={m.id}>{m.content.text}</li>
+        ))}
+      </ul>
+      <button onClick={() => send({ content: { text: "hello" } })}>Send</button>
+    </div>
+  );
+}
+
+export function App() {
+  return (
+    <PortalProvider client={portal}>
+      <ChatRoom />
+    </PortalProvider>
+  );
+}
+```
+
+A few things worth noticing:
+
+- `portal.channel(id)` (what `useChannel` calls under the hood) returns the same handle
+  for the same id, so multiple components watching `"lobby"` share one socket.
+- Anonymous users get a stable identity across page refreshes, an empty inbox, and are
+  refused from any channel whose config sets `anonymous: false` (see
+  [Tokens & auth](/core/tokens-and-auth)).
+- `apiKey` is a publishable key — safe to ship in a browser bundle.
+
+## Add real users
+
+When you're ready to attach Portal to your own auth, pass a `token` — either directly
+to the `Portal` constructor, or later via `PortalProvider`'s `token` prop (which forwards
+to `client.setToken`). A `token` is a string or an async callback that resolves to one;
+the callback form is recommended, since it's re-invoked on connect, reconnect, and
+expiry.
+
+The token itself is a signed JWT identifying the user, issued by your backend. Stand up
+a small endpoint that authenticates the request however your app already does, then
+returns that token:
+
+```tsx
+import { Portal } from "@portalsdk/core";
+import { PortalProvider, useChannel } from "@portalsdk/react";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+
+async function fetchPortalToken(): Promise<string> {
+  const res = await fetch("/api/portal-token", { credentials: "include" });
+  const { token } = (await res.json()) as { token: string };
+  return token;
+}
+
+interface ChatMessage {
+  text: string;
+}
+
+function ChatRoom() {
+  const { messages, send } = useChannel<ChatMessage>({ channelId: "lobby" });
+  return (
+    <ul>
+      {messages.map((m) => (
+        <li key={m.id}>{m.content.text}</li>
+      ))}
+    </ul>
+  );
+}
+
+export function App() {
+  return (
+    <PortalProvider client={portal} token={fetchPortalToken}>
+      <ChatRoom />
+    </PortalProvider>
+  );
+}
+```
+
+On login, call `portal.setToken(fetchPortalToken)` directly (or update the `token` prop)
+to move the client from anonymous to identified without remounting. On logout,
+`portal.setToken(undefined)` returns the client to anonymous mode. Live channels and the
+inbox re-authenticate in place — see [Tokens & auth](/core/tokens-and-auth) for the full
+picture, and [Authoring portal.config.ts](/config-cli/portal-config) for verifying your
+own JWTs.
+
+> **Doc gap:** the exact contract for `/api/portal-token` above is intentionally left
+> generic. The material available to write these docs covers *verifying your own JWTs*
+> (`auth` in `portal.config.ts`) in detail, but doesn't document a public endpoint or
+> process for the alternative path — tokens "minted by Portal" — that
+> `@portalsdk/config` references as the default. If your project relies on
+> Portal-minted tokens rather than your own JWTs, that flow isn't covered here yet.
+
+## Next steps
+
+- [Core SDK → Client setup](/core/client-setup) for the full client surface.
+- [React → PortalProvider](/react/provider) and [useChannel](/react/use-channel) for the
+  hook API.
+- [Guides → Realtime chat](/guides/realtime-chat) for a complete, copy-pasteable room.
+
+# Errors
+
+Every failure the SDK surfaces is a `PortalError` — carrying a stable, machine-readable
+`code` you can safely branch on — or one of its named subclasses, for the failures a
+caller typically reacts to differently:
+
+```ts
+import {
+  PortalError,
+  InvalidApiKeyError,
+  BlockedError,
+  TokenExpiredError,
+  NotMemberError,
+  ChannelAtCapacityError,
+  AnonymousNotAllowedError,
+  NotYetSupportedError,
+  DegradedError,
+} from "@portalsdk/core";
+```
+
+| Class | `code` | When |
+| --- | --- | --- |
+| `InvalidApiKeyError` | `"invalid_api_key"` | A bad or unknown `apiKey`. Terminal — `status` goes to `"blocked"`, no reconnect loop. |
+| `BlockedError` | `"blocked"` | A gate or your own `portal.config.ts` middleware refused a send. Carries `reason` — end-user-visible copy. |
+| `TokenExpiredError` | `"token_expired"` | The token was rejected as expired. A callback token is re-resolved once and retried; a still-failing retry, or a static string token, surfaces this. |
+| `NotMemberError` | `"not_member"` | A membership channel with no row for this user — on connect, or on a `to:`-send. |
+| `ChannelAtCapacityError` | `"channel_at_capacity"` | The channel refused admission at its hard cap. |
+| `AnonymousNotAllowedError` | `"anonymous_not_allowed"` | The channel is configured `anonymous: false` and the token is anonymous. |
+| `NotYetSupportedError` | `"not_yet_supported"` | A reserved surface was used (e.g. a `where` filter pushed to the server, attachments, non-text media). Typed but rejected loudly. |
+| `DegradedError` | `"degraded"` | A send into an extension namespace whose extension is currently degraded; the channel itself keeps working. |
+
+## Handling send failures
+
+`send()` rejects with the relevant error:
+
+```ts
+import { Portal, BlockedError, PortalError } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel("room-1");
+room.acquire();
+
+function showToUser(_message: string) {}
+
+async function sendMessage() {
+  try {
+    await room.send({ content: { text: "hello" } });
+  } catch (err) {
+    if (err instanceof BlockedError) {
+      showToUser(err.reason); // end-user-visible copy from your middleware or the platform
+    } else if (err instanceof PortalError) {
+      console.error(err.code, err.message);
+    } else {
+      throw err;
+    }
+  }
+}
+```
+
+## Connection-level refusals
+
+Refusals that aren't tied to a single `send()` call — a bad API key, being banned, not
+being a member, hitting channel capacity — arrive on the `status` event instead, and
+move `room.status` to `"blocked"`:
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel("room-1");
+room.acquire();
+
+room.on("status", (status, error) => {
+  if (status === "blocked" && error) {
+    console.error("channel blocked:", error.code, error.message);
+  }
+});
+```
+
+`"blocked"` is terminal for that handle: there's no reconnect loop once it fires.
+
+# Client setup
+
+`@portalsdk/core` is the framework-agnostic Portal client: it manages realtime channels
+and a per-user inbox over a WebSocket, and exposes reactive,
+`useSyncExternalStore`-shaped stores you can bind to any UI. It's client-only — the
+published package ships a `"use client"` directive and isn't meant for server
+components (see [SSR & Next.js](/core/ssr-and-nextjs)).
+
+```bash
+npm install @portalsdk/core
+```
+
+## Construct a client
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({
+  apiKey: "pk_your_publishable_key",
+});
+```
+
+Construction is synchronous and passive: it stores your config and builds empty
+registries, with no network call, no token fetch, and no validation. That makes it safe
+to construct once at module scope, before any user exists — the first network activity
+happens later, on the first channel `acquire()` or the first inbox subscription.
+
+`PortalConfig` accepts:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `apiKey` | `string` | Publishable key identifying the app. Safe in the bundle. |
+| `token` | `string \| (() => Promise<string>)` | Identifies the user. Optional — omit it for anonymous mode. A callback is re-invoked on connect, reconnect, and expiry (recommended); a plain string is used as-is. |
+| `apiUrl` | `string` | Base URL override. Production hosts are baked in; primarily for development and testing. |
+| `realtimeUrl` | `string` | Base URL override for the realtime socket. Same caveat as `apiUrl`. |
+
+See [Tokens & auth](/core/tokens-and-auth) for everything `token` affects, including
+anonymous mode and `setToken`.
+
+## Get a channel handle
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+interface ChatMessage {
+  text: string;
+}
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+
+const room = portal.channel<ChatMessage>("room-1");
+room.acquire();
+
+room.subscribe(() => {
+  console.log(room.getSnapshot().messages.length, "messages");
+});
+
+await room.send({ content: { text: "hello" } });
+
+room.release();
+```
+
+`portal.channel(id, options?)` is a registry lookup-or-create: calling it again with the
+same id returns the *same* handle, so many views of a room share one socket. Options
+(`history`, `metadata`) apply only at first creation — a later call with different
+options returns the existing handle and ignores them (a dev-mode warning fires; this is
+silent in production).
+
+A handle does nothing until `acquire()`-ed; call `release()` when you're done with it
+(or use `using` for automatic cleanup, since `ChannelHandle` implements
+`Symbol.dispose`):
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+
+function readLobbyOnce() {
+  using room = portal.channel("lobby");
+  room.acquire();
+  return room.getSnapshot().messages.length;
+}
+```
+
+If you're using React, [`useChannel`](/react/use-channel) manages `acquire()`/`release()`
+for you via mount/unmount — most apps never call these directly.
+
+## The inbox
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+
+const inbox = portal.inbox();
+console.log(inbox.getSnapshot().counter);
+```
+
+`portal.inbox()` is a lazy singleton: it's created, and its connection opened, on first
+call — never at construction. See [Inbox](/core/inbox) for the full surface.
+
+## Switching identity
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+
+async function login(): Promise<string> {
+  const res = await fetch("/api/portal-token", { credentials: "include" });
+  const { token } = (await res.json()) as { token: string };
+  return token;
+}
+
+async function onSignIn() {
+  portal.setToken(login);
+}
+
+function onSignOut() {
+  portal.setToken(undefined);
+}
+```
+
+`setToken` replaces the token source for every live channel and the inbox — see
+[Tokens & auth](/core/tokens-and-auth).
+
+## Package size
+
+`@portalsdk/core` is ~14 kB min+gzip, with two runtime dependencies:
+`@portalsdk/wire-protocol` (the wire-format types the client sends and parses) and
+`partysocket`. You won't reach for either directly in normal use.
+
+# Inbox
+
+The inbox is a per-user, cross-channel feed: mentions, direct sends, and anything a
+`notify` bridge in `portal.config.ts` turns into a notification (see
+[Authoring portal.config.ts](/config-cli/portal-config)). Get it with `portal.inbox()` —
+a lazy singleton, created and connected on first call:
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const inbox = portal.inbox();
+```
+
+Anonymous users get a permanently-empty, ready inbox — there's nothing to fetch for an
+identity that doesn't persist across sessions.
+
+## Two kinds of state: channels and items
+
+`InboxHandle` tracks two related but distinct things:
+
+- **`channels`** — one entry per channel you have activity in, positional (a watermark +
+  an unread count), recency-sorted.
+- **`items`** — individual targeted events (mentions, directed sends, notify
+  descriptors), each with its own per-item read state.
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const inbox = portal.inbox();
+
+inbox.channels; // InboxEntries — recency-sorted; .get(id) always hits the full registry
+inbox.items; // readonly InboxItem[]
+inbox.counter; // number — the global badge: Σ channel unreads + unseen items
+```
+
+`counter` excludes muted channels' ordinary unreads, but **not** items addressed to you
+— a mention in a muted room still contributes to the badge, because muting silences
+aggregation, not delivery.
+
+### Channel entries
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const inbox = portal.inbox();
+
+const entry = inbox.channels.get("room-1");
+entry?.unread; // latestSeq − your watermark for this channel
+entry?.markAsRead(); // advances the INBOX position for this channel only
+entry?.mute();
+entry?.unmute();
+```
+
+`entry.markAsRead()` is independent of the channel's own watermark
+(`room.markAsRead()` from [Channels](/core/channels)) — the inbox tracks *noticing*, the
+channel tracks *reading*, and the two are allowed to disagree.
+
+### Items
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const inbox = portal.inbox();
+
+for (const item of inbox.items) {
+  console.log(item.id, item.type, item.title, item.data, item.read);
+  item.markAsRead(); // flips THIS item only, never cascades to older items
+}
+
+inbox.markAllRead(); // global, zero-argument: marks every item read
+```
+
+Each `item.id` is the event's idempotency key — stable across redelivery, so it's the
+right thing to key a React list (or a dedup set) on. See
+[In-app notifications](/guides/in-app-notifications) for a worked example.
+
+## Filtered views
+
+`inbox.view(query)` gives you a scoped, live lens without a second connection:
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+interface AssignmentPayload {
+  ticketId: string;
+}
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const inbox = portal.inbox();
+
+const assignments = inbox.view<AssignmentPayload>({
+  where: { type: { eq: "ticket.assigned" } },
+});
+
+assignments.items; // readonly InboxItem<AssignmentPayload>[]
+assignments.unseen; // unseen count scoped to THIS view's filter (unlike inbox.counter)
+assignments.subscribe(() => console.log(assignments.getSnapshot().items.length));
+```
+
+You can also scope a view to one channel:
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const inbox = portal.inbox();
+
+const roomInbox = inbox.view({ channelId: "room-1" });
+```
+
+## Reacting to new items
+
+`InboxHandle` emits an `"item"` event whenever a new item arrives — useful for toasts and
+other one-shot reactions, as opposed to reading the accumulated `items` array:
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const inbox = portal.inbox();
+
+const unsubscribe = inbox.on("item", (item) => {
+  console.log("new inbox item:", item.type, item.data);
+});
+
+inbox.on("change", () => {
+  // fires on any state change to channels/items/counter
+});
+
+unsubscribe();
+```
+
+If you're using React, [`useInbox`](/react/use-inbox)'s `onItem` param wraps this event
+directly — no need to reach for the core client yourself.
+
+## Store contract
+
+Like channels, `InboxHandle` and `InboxView` are `useSyncExternalStore`-shaped:
+
+```ts
+import { Portal } from "@portalsdk/core";
+import type { InboxSnapshot } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const inbox = portal.inbox();
+
+function render(_snapshot: InboxSnapshot) {}
+
+inbox.subscribe(() => render(inbox.getSnapshot()));
+inbox.getSnapshot(); // { channels, items, counter, status }
+inbox.status; // InboxStatus: "connecting" | "ready" | "reconnecting" (a live inbox is never "idle" — see below)
+```
+
+`InboxStatus` also includes `"idle"`, for consumers that model a handle that hasn't been
+created at all — `portal.inbox()` itself is never `"idle"` (it's at least `"connecting"` from
+the moment it's created); `@portalsdk/react`'s SSR-inert `useInbox` is the one place that
+value actually appears (see [SSR & Next.js](/core/ssr-and-nextjs)).
+
+If you're using React, [`useInbox`](/react/use-inbox) wraps the global handle and a
+filtered view together.
+
+# Channels
+
+A channel is a room: a seq-ordered stream of messages, plus presence, activity, and
+read state, shared by everyone connected to the same channel id. Get a handle with
+`portal.channel(id, options?)` — the same id always returns the same handle, so many
+views of a room share one socket.
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+interface ChatMessage {
+  text: string;
+}
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel<ChatMessage>("room-1", { history: 50 });
+room.acquire();
+```
+
+`ChannelOptions`:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `history` | `number \| "none"` | Initial backfill on connect. Default `50`. `"none"` starts live-only. |
+| `metadata` | `Record<string, unknown>` | Initial presence metadata for this session — see [Presence](#presence). |
+
+## Sending messages
+
+`send()` takes either a persistent message (stored, appears in history, gets a `seq`) or
+an ephemeral one (fire-and-forget — no persistence, no `seq`, never appears in history):
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+interface ChatMessage {
+  text: string;
+}
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel<ChatMessage>("room-1");
+room.acquire();
+
+async function examples() {
+  // Persistent — stored, ordered, shows up in history and for late joiners.
+  const ack = await room.send({ content: { text: "hello" } });
+  console.log(ack.id, ack.timestamp);
+
+  // Directed to one member only, and mentioning another.
+  await room.send({
+    content: { text: "@alice you're up" },
+    to: "user_alice",
+    mentions: [{ userId: "user_alice" }],
+  });
+
+  // Ephemeral — never stored, no seq, no history. Good for cursors and transient signals.
+  await room.send({ ephemeral: true, content: { text: "typing-like signal" } });
+}
+```
+
+`send()` rejects with a `PortalError` subclass when the platform or your own
+`portal.config.ts` middleware refuses the message — see [Errors](/core/errors).
+
+## Reading messages and history
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+interface ChatMessage {
+  text: string;
+}
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel<ChatMessage>("room-1");
+room.acquire();
+
+room.messages; // readonly Message<M>[], seq-ordered, mutations (retractions) applied in place
+
+room.hasPrevious; // true until loadPrevious() reaches the beginning of the channel
+room.isLoadingPrevious;
+
+async function loadOlder() {
+  await room.loadPrevious(); // fetch an older page; returns false once exhausted
+}
+```
+
+`room.messages` starts with the initial backfill from `history` (or empty, under
+`"none"`) and grows as new messages arrive; `loadPrevious()` pages further back.
+
+You can also take a filtered, live lens over the same store without opening a second
+socket:
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+interface ChatMessage {
+  text: string;
+}
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel<ChatMessage>("room-1");
+room.acquire();
+
+const mentionsOnly = room.view({ type: { eq: "mention" } });
+mentionsOnly.messages;
+mentionsOnly.subscribe(() => console.log(mentionsOnly.getSnapshot().messages.length));
+```
+
+## Read state
+
+Every channel tracks a **watermark** — how far *this device* has read, independent of
+the inbox's own per-channel read state (see [Inbox](/core/inbox) for that distinction):
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel("room-1");
+room.acquire();
+
+room.unread; // number
+room.markAsRead(); // advances the channel watermark
+```
+
+## Presence
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel("room-1");
+room.acquire();
+
+room.presence; // DetailedPresence | AggregatePresence | undefined
+```
+
+Small/standard channels get `DetailedPresence` (`{ kind: "detailed", participants, count }`);
+larger ones get `AggregatePresence` (`{ kind: "aggregate", count, recent }`) with only
+join/leave deltas, not a full roster. Either way, check `presence.kind` to narrow:
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel("room-1");
+room.acquire();
+
+const p = room.presence;
+if (p?.kind === "detailed") {
+  console.log(p.participants.map((u) => u.id));
+} else if (p?.kind === "aggregate") {
+  console.log(p.count, p.recent);
+}
+```
+
+Replace your own presence metadata mid-session with `setMetadata` — this is
+presentation-only, never used for authorization:
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel("room-1");
+room.acquire();
+
+room.setMetadata({ cursor: { x: 120, y: 48 } });
+```
+
+## Activity (typing indicators, and beyond)
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel("room-1");
+room.acquire();
+
+room.activity; // readonly ActivityEntry[] — other users' current activity, never your own
+room.sendActivity("typing"); // any string kind; SDK throttles automatically
+
+// Sugar for the common case:
+room.typing; // readonly string[] of user ids currently typing
+room.sendTyping(); // sendActivity("typing")
+```
+
+`sendActivity`/`sendTyping` are a no-op on broadcast channels.
+
+## Members and channel info
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel("room-1");
+room.acquire();
+
+async function inspect() {
+  const members = await room.members(); // MemberRow[] — fetched directory, not live state
+  console.log(members);
+}
+
+room.info; // ChannelInfo | undefined — id, mode ("standard" | "broadcast"), name?, meta?
+room.me; // { id, anon, claims } | undefined — your own verified identity, once connected
+```
+
+## Status and events
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+interface ChatMessage {
+  text: string;
+}
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel<ChatMessage>("room-1");
+room.acquire();
+
+room.status; // "idle" | "connecting" | "ready" | "reconnecting" | "degraded" | "degraded-http" | "blocked"
+
+const unsubscribe = room.on("message", (msg) => console.log(msg.content));
+room.on("mention", (msg) => console.log("mentioned:", msg));
+room.on("retract", (messageId) => console.log("retracted:", messageId));
+room.on("presence", (p) => console.log(p));
+room.on("activity", (entries) => console.log(entries));
+room.on("status", (status, error) => console.log(status, error));
+
+unsubscribe();
+```
+
+`"degraded-http"` means the socket is down and reconnecting, but HTTP publish still
+works — you can still send, incoming messages may lag until reconnect gap-fill catches
+up. `"blocked"` is terminal (bad key, banned, not a member, at capacity) — see
+[Errors](/core/errors).
+
+## Store contract
+
+`ChannelHandle` (and the filtered `ChannelView` from `view()`) exposes a
+`useSyncExternalStore`-shaped contract directly, so you can bind it to any UI layer, not
+just React:
+
+```ts
+import { Portal } from "@portalsdk/core";
+import type { ChannelSnapshot } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel("room-1");
+room.acquire();
+
+function render(_snapshot: ChannelSnapshot) {}
+
+room.subscribe(() => render(room.getSnapshot()));
+```
+
+If you're using React, [`useChannel`](/react/use-channel) wraps all of this for you.
+
+# Tokens & auth
+
+## Anonymous mode
+
+`token` on `PortalConfig` is optional. Omit it, and the client mints and manages its own
+anonymous credential on first use, keeping one stable anonymous identity across page
+refreshes:
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" }); // no token → anonymous
+```
+
+Anonymous users:
+
+- get `me.anon === true` on every channel they join;
+- get a permanently-empty inbox (see [Inbox](/core/inbox));
+- are refused, with `AnonymousNotAllowedError`, from any channel configured
+  `anonymous: false` (see [Authoring portal.config.ts](/config-cli/portal-config)).
+
+## Identified users
+
+Pass `token` — a string, or (recommended) an async callback — either to the constructor
+or later via `setToken`:
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+async function fetchPortalToken(): Promise<string> {
+  const res = await fetch("/api/portal-token", { credentials: "include" });
+  const { token } = (await res.json()) as { token: string };
+  return token;
+}
+
+const portal = new Portal({
+  apiKey: "pk_your_publishable_key",
+  token: fetchPortalToken,
+});
+```
+
+A callback is re-invoked on connect, reconnect, and token expiry, which is why it's the
+recommended shape over a plain string — a static string can't be refreshed, so a
+still-failing retry after expiry surfaces `TokenExpiredError` and moves the channel's
+`status` to `"blocked"`.
+
+The token itself is a signed JWT identifying the user. If you're verifying your own
+JWTs (rather than relying on Portal-minted tokens), map your token's claims onto Portal
+identity fields with the `auth` block in `portal.config.ts` — see
+[Authoring portal.config.ts](/config-cli/portal-config#authentication).
+
+## Logging in and out without remounting
+
+`setToken` swaps the credential source for an already-running client:
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+async function fetchPortalToken(): Promise<string> {
+  const res = await fetch("/api/portal-token", { credentials: "include" });
+  const { token } = (await res.json()) as { token: string };
+  return token;
+}
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+
+// On login:
+portal.setToken(fetchPortalToken);
+
+// On logout, back to anonymous:
+portal.setToken(undefined);
+```
+
+Passing the same source again is a no-op. When the identity genuinely changes, every
+live channel handle and the inbox re-authenticate in place — idle (unacquired) handles
+simply pick up the new credential the next time they're acquired. No component needs to
+remount for a login/logout to take effect.
+
+In React, `PortalProvider`'s `token` prop forwards to `setToken` for you — see
+[PortalProvider](/react/provider).
+
+## Claims
+
+Once connected, a channel's own verified identity is available at `room.me`:
+
+```ts
+import { Portal } from "@portalsdk/core";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+const room = portal.channel("room-1");
+room.acquire();
+
+room.me; // { id: string; anon: boolean; claims: Record<string, unknown> } | undefined
+```
+
+`claims` reflects whatever your `auth.claimMap` (or Portal's own token minting) put
+there.
+
+# SSR & Next.js
+
+Both `@portalsdk/core` and `@portalsdk/react` are client-only — meant to run in a browser,
+not inside server code. Only `@portalsdk/react`'s dist ships a `"use client"` directive
+(`@portalsdk/core` has no React dependency and doesn't need one; its hooks are the actual
+Client Component boundary).
+
+**`@portalsdk/react`'s hooks are SSR-inert, not throwing.** During server rendering
+(`typeof window === "undefined"` — which includes a Next.js Client Component's server
+prerender pass, which runs despite `"use client"`), `useChannel`/`useInbox` render a stable
+idle snapshot instead of connecting: no `acquire()`, no network, nothing thrown. On an actual
+client this never engages — behavior there is unchanged.
+
+## App Router
+
+Render anything that touches `useChannel` or `useInbox` from a Client Component, same as any
+other stateful hook — no special wrapper is required:
+
+```tsx
+// file: chat-room.tsx
+// app/chat/chat-room.tsx
+"use client";
+
+import { useChannel } from "@portalsdk/react";
+
+interface ChatMessage {
+  text: string;
+}
+
+export function ChatRoom() {
+  const { messages, send } = useChannel<ChatMessage>({ channelId: "lobby" });
+
+  return (
+    <div>
+      <ul>
+        {messages.map((m) => (
+          <li key={m.id}>{m.content.text}</li>
+        ))}
+      </ul>
+      <button onClick={() => send({ content: { text: "hi" } })}>Send</button>
+    </div>
+  );
+}
+```
+
+A Server Component page can render that Client Component normally — Portal only needs
+to own the leaf that actually calls the hooks; everything above it in the tree can stay
+a Server Component:
+
+```tsx
+// file: page.tsx
+// app/chat/page.tsx
+import { ChatRoom } from "./chat-room";
+
+export default function ChatPage() {
+  return <ChatRoom />;
+}
+```
+
+The same applies to `PortalProvider` — see [PortalProvider](/react/provider) for where
+to put the client instance and provider in an App Router tree.
+
+## `dynamic(..., { ssr: false })` is not required
+
+That workaround exists for hooks that genuinely can't tolerate running during server
+rendering. Portal's hooks can: during the server's prerender pass, `ChatRoom` above renders
+its inert idle state (`status: "idle"`, empty `messages`) rather than throwing or connecting;
+once the same component re-renders in the browser, it connects normally. You only need
+`ssr: false` here for reasons unrelated to Portal — e.g. another dependency in the same
+component that itself doesn't tolerate server rendering.
+
+## Hydration
+
+`useSyncExternalStore`'s `getServerSnapshot` argument is wired to the same idle snapshot the
+hook renders during SSR. Since no handle is created server-side, the client's first
+(pre-hydration-effects) render produces the identical inert shape too — so there's nothing
+for React to warn about mismatching between server and client output.
+
+# useChannel
+
+`useChannel` subscribes a component to one channel. It's a thin binding over the core
+`ChannelHandle`: it resolves the handle from the registry, drives the refcount from
+mount/unmount, and mirrors the handle's store through `useSyncExternalStore`. All state
+lives in core — the hook owns none of it.
+
+```tsx
+import { useChannel } from "@portalsdk/react";
+
+interface ChatMessage {
+  text: string;
+}
+
+function ChatRoom({ channelId }: { channelId: string }) {
+  const { messages, send, status } = useChannel<ChatMessage>({ channelId });
+
+  return (
+    <div>
+      <p>status: {status}</p>
+      <ul>
+        {messages.map((m) => (
+          <li key={m.id}>{m.content.text}</li>
+        ))}
+      </ul>
+      <button onClick={() => send({ content: { text: "hello" } })}>Send</button>
+    </div>
+  );
+}
+```
+
+## Params
+
+| Param | Type | Notes |
+| --- | --- | --- |
+| `channelId` | `string \| undefined` | `undefined` renders inert and opens no connection — the two-pane "nothing selected" pattern. Changing the id releases the old handle and acquires the new one. |
+| `readOn` | `"mount" \| "visible" \| "manual"` | When the channel watermark auto-advances. Default `"mount"`. `"visible"` advances on mount if the document is visible, then again on each `visibilitychange` → visible while mounted. `"manual"` never auto-advances — call `markAsRead()` yourself. |
+| `history` | `number \| "none"` | Initial backfill on connect. Default `50`. |
+| `metadata` | `Record<string, unknown>` | Initial presence metadata for this session. |
+| `where` | `MessageWhere<M>` | Reserved surface — typed, but rejected at runtime in v1 (`NotYetSupportedError`). |
+| `onMention` | `(msg: Message<M>) => void` | Called when a message's `mentions` include you. |
+| `onMessage` | `(msg: Message<M>) => void` | Called on every message delivered to this channel, persistent or ephemeral. |
+| `onError` | `(err: PortalError) => void` | Called on channel errors. |
+
+### The two-pane pattern
+
+```tsx
+import { useChannel } from "@portalsdk/react";
+
+interface ChatMessage {
+  text: string;
+}
+
+function ChannelPane({ channelId }: { channelId: string | undefined }) {
+  const { messages } = useChannel<ChatMessage>({ channelId });
+
+  if (channelId === undefined) {
+    return <p>Select a channel</p>;
+  }
+
+  return (
+    <ul>
+      {messages.map((m) => (
+        <li key={m.id}>{m.content.text}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+Because `useChannel` itself tolerates `channelId: undefined`, you can call it
+unconditionally at the top of a component even before a selection exists — no need to
+branch above the hook call.
+
+## Result
+
+`useChannel` returns `UseChannelResult<M>`: `messages`, `send`, `loadPrevious`,
+`isLoadingPrevious`, `hasPrevious`, `channel`, `me`, `ext`, `presence`, `activity`,
+`sendActivity`, `typing`, `sendTyping`, `unread`, `markAsRead`, `setMetadata`, and
+`status` — mirroring the [core channel surface](/core/channels) field-for-field. `ext`
+carries extension snapshots for late joiners; see the
+[extensions guide](/guides/extensions). Import
+the type directly if you want to name it, e.g. to type a prop:
+
+```tsx
+import type { UseChannelResult } from "@portalsdk/react";
+
+interface ChatMessage {
+  text: string;
+}
+
+function MessageList({ messages }: { messages: UseChannelResult<ChatMessage>["messages"] }) {
+  return (
+    <ul>
+      {messages.map((m) => (
+        <li key={m.id}>{m.content.text}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+## Typing indicators
+
+```tsx
+import { useChannel } from "@portalsdk/react";
+
+interface ChatMessage {
+  text: string;
+}
+
+function Composer({ channelId }: { channelId: string }) {
+  const { typing, sendTyping, send } = useChannel<ChatMessage>({ channelId });
+
+  return (
+    <div>
+      {typing.length > 0 && <p>{typing.join(", ")} typing…</p>}
+      <input onChange={() => sendTyping()} />
+      <button onClick={() => send({ content: { text: "hi" } })}>Send</button>
+    </div>
+  );
+}
+```
+
+## Reacting to mentions and errors
+
+```tsx
+import { useChannel } from "@portalsdk/react";
+import type { PortalError } from "@portalsdk/core";
+
+interface ChatMessage {
+  text: string;
+}
+
+function ChatRoom({ channelId }: { channelId: string }) {
+  const { messages } = useChannel<ChatMessage>({
+    channelId,
+    onMention: (msg) => console.log("mentioned in:", msg.content.text),
+    onError: (err: PortalError) => console.error(err.code, err.message),
+  });
+
+  return (
+    <ul>
+      {messages.map((m) => (
+        <li key={m.id}>{m.content.text}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+## Reacting to every message, and updating presence metadata
+
+`onMessage` fires on every message delivered to the channel — persistent or ephemeral —
+which is the right tool for high-frequency ephemeral traffic (live cursors, transient
+signals) that you want to react to as discrete events rather than read off the accumulated
+`messages` array. `setMetadata` replaces your own presence metadata mid-session — a direct
+pass-through to the channel handle's `setMetadata`:
+
+```tsx
+import type { PointerEvent } from "react";
+import { useChannel } from "@portalsdk/react";
+
+interface CursorPosition {
+  x: number;
+  y: number;
+}
+
+function LiveCursor({ channelId }: { channelId: string }) {
+  const { setMetadata, send } = useChannel<CursorPosition>({
+    channelId,
+    onMessage: (msg) => {
+      if (msg.ephemeral) console.log("cursor from", msg.sender.id, msg.content);
+    },
+  });
+
+  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
+    const position = { x: e.clientX, y: e.clientY };
+    void send({ ephemeral: true, content: position });
+    setMetadata({ cursor: position });
+  }
+
+  return <div onPointerMove={onPointerMove} style={{ width: "100%", height: "100%" }} />;
+}
+```
+
+See [Guides → Live cursors](/guides/live-cursors) for the full pattern, including why you'd
+combine ephemeral sends with throttled presence metadata rather than using just one.
+
+# Patterns
+
+A few shapes that come up often when wiring `@portalsdk/react` into a real app.
+
+## One client, at the top of the tree
+
+Construct the `Portal` client once, outside your component tree (module scope), and
+provide it once at the root. `PortalProvider` is passive — it just publishes the client
+on context — so nesting more than one is rarely useful; a single provider near your app
+root is enough for every `useChannel`/`useInbox` call beneath it.
+
+```tsx
+import type { ReactNode } from "react";
+import { Portal } from "@portalsdk/core";
+import { PortalProvider } from "@portalsdk/react";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+
+function AppRoot({ children }: { children: ReactNode }) {
+  return <PortalProvider client={portal}>{children}</PortalProvider>;
+}
+```
+
+## Switching channels without unmounting the shell
+
+Since `channelId: undefined` renders `useChannel` inert, a channel switcher can hold the
+selection in state and let the hook track it — no manual `acquire`/`release`, and no
+remount of the surrounding layout:
+
+```tsx
+import { useState } from "react";
+import { useChannel } from "@portalsdk/react";
+
+interface ChatMessage {
+  text: string;
+}
+
+function ChannelSwitcher() {
+  const [channelId, setChannelId] = useState<string | undefined>(undefined);
+  const { messages } = useChannel<ChatMessage>({ channelId });
+
+  return (
+    <div>
+      <nav>
+        {["general", "random", "help"].map((id) => (
+          <button key={id} onClick={() => setChannelId(id)}>
+            {id}
+          </button>
+        ))}
+      </nav>
+      {channelId === undefined ? (
+        <p>Pick a channel</p>
+      ) : (
+        <ul>
+          {messages.map((m) => (
+            <li key={m.id}>{m.content.text}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+```
+
+Changing `channelId` releases the old handle and acquires the new one automatically.
+
+## Watching several channels at once
+
+Each `useChannel` call is independent, so a sidebar of live-updating room previews is
+just one hook call per row:
+
+```tsx
+import { useChannel } from "@portalsdk/react";
+
+interface ChatMessage {
+  text: string;
+}
+
+function RoomPreview({ channelId }: { channelId: string }) {
+  const { messages, unread } = useChannel<ChatMessage>({ channelId, readOn: "manual" });
+  const last = messages[messages.length - 1];
+
+  return (
+    <div>
+      <strong>{channelId}</strong> {unread > 0 && <span>({unread})</span>}
+      <p>{last?.content.text ?? "No messages yet"}</p>
+    </div>
+  );
+}
+
+function Sidebar({ channelIds }: { channelIds: string[] }) {
+  return (
+    <>
+      {channelIds.map((id) => (
+        <RoomPreview key={id} channelId={id} />
+      ))}
+    </>
+  );
+}
+```
+
+Each preview opens its own connection for as long as it's mounted — since
+`portal.channel(id)` is a lookup-or-create keyed by id, a preview and a full open room
+for the same channel share the same underlying socket rather than opening a second one.
+`readOn: "manual"` keeps a preview from silently clearing its own unread badge just by
+being on screen.
+
+## Pairing a channel view with the inbox badge
+
+`useChannel`'s `unread` and `useInbox`'s per-channel entry are two different read
+positions — see [Inbox](/core/inbox#channel-entries) for why. A typical room header shows
+the channel's own unread count while active, and clears the inbox's notice for that
+channel on open:
+
+```tsx
+import { useEffect } from "react";
+import { useChannel, useInbox } from "@portalsdk/react";
+
+interface ChatMessage {
+  text: string;
+}
+
+function RoomHeader({ channelId }: { channelId: string }) {
+  const { unread } = useChannel<ChatMessage>({ channelId });
+  const { channels } = useInbox();
+
+  useEffect(() => {
+    channels.get(channelId)?.markAsRead();
+  }, [channelId, channels]);
+
+  return <h2>Room ({unread} unread)</h2>;
+}
+```
+
+## Guarding against double-invoked effects
+
+`useChannel`/`useInbox` connections are refcounted in core, with a short grace period
+after the last `release()` — so React StrictMode's development-only double
+mount/unmount/mount doesn't cause a visible reconnect. You don't need to add your own
+guards around the hooks for this.
+
+# Guide: Channel extensions
+
+An extension is your own code running alongside a channel. It owns a slice of the
+channel's message types — a namespace like `counter.` — and Portal runs one durable
+instance of it per channel. Clients publish into the namespace, Portal hands your code
+the messages a batch at a time, and whatever you return is broadcast to everyone in the
+channel.
+
+This guide builds one end to end: a counter that everybody in a room can increment, with
+a running total that stays correct for someone who joins an hour late.
+
+Three pieces, in order:
+
+1. **Author** the extension — a class plus a static manifest.
+2. **Attach** it to a channel in `portal.config.ts` and `portal deploy`.
+3. **Consume** it from the client — send into the namespace, render live broadcasts, and
+   read the snapshot on join.
+
+## Why a snapshot exists
+
+The thing that makes an extension more than a message filter is the split between *live*
+and *joined-late*.
+
+- A client that is already connected sees each broadcast as it happens, through
+  `onMessage`.
+- A client that connects afterwards missed all of them. It needs the current state, not
+  the history of how the state got there.
+
+Your extension answers the second case with `onSnapshot`, and Portal caches that answer
+and hands it to every joining client in the connect frame. On the client it arrives as
+`channel.ext.<handle>` — populated before your UI's first render, without a round trip
+and without waiting for the next broadcast.
+
+## 1. Author the extension
+
+```sh
+npm install @portalsdk/extension-protocol
+```
+
+The package is **types only** — nothing in it runs. Portal generates the plumbing that
+connects your class to the platform when you deploy.
+
+```ts
+// file: extensions/counter.ts
+import {
+  defineExtension,
+  type BatchRequest,
+  type ExtensionContext,
+  type ExtensionManifest,
+} from "@portalsdk/extension-protocol";
+
+class Counter {
+  static manifest: ExtensionManifest = {
+    namespace: "counter.",
+    transport: "ws",
+  };
+
+  #total = 0;
+
+  constructor(private ctx: ExtensionContext) {}
+
+  // Instances are recycled when a channel goes idle — reload from storage, don't assume zero.
+  async onInit() {
+    this.#total = (await this.ctx.storage.get<number>("total")) ?? 0;
+  }
+
+  async onBatch({ messages }: BatchRequest) {
+    const bumps = messages.filter((m) => m.type === "counter.increment").length;
+    if (bumps === 0) return;
+
+    this.#total += bumps;
+    await this.ctx.storage.put("total", this.#total);
+
+    return {
+      broadcasts: [{ type: "counter.state", content: { total: this.#total } }],
+      snapshotDirty: true,
+    };
+  }
+
+  async onSnapshot() {
+    return { snapshot: { total: this.#total } };
+  }
+}
+
+export default defineExtension(Counter);
+```
+
+### The manifest
+
+Every extension declares its own facts as a static `manifest`:
+
+| Field | Meaning |
+|---|---|
+| `namespace` | The message-type prefix you own, **ending in a dot** (`"counter."`). Every type you send and receive lives under it. |
+| `transport` | `"ws"` if clients publish over the channel's WebSocket, `"http"` for HTTP requests. Clients never choose this — Portal routes their `send()` by the manifest. |
+
+Two extensions on the same channel may not claim the same namespace, and a channel
+carries at most **5**. `portal deploy` rejects violations before anything ships.
+
+### The handlers
+
+| Handler | When | Required |
+|---|---|---|
+| `onInit` | Once, before the first batch, when your extension first sees activity on a channel. | no |
+| `onBatch` | With each batch of messages published to your namespace. | **yes** |
+| `onSnapshot` | To build the state a joining client needs to render. Portal may call it at any time, including while batches are in flight. | no |
+| `onShutdown` | Best effort, when the channel goes quiet. | no |
+
+Returning nothing from `onBatch` means "no output" — that's the `bumps === 0` branch
+above. Each broadcast `type` must start with your namespace or it is dropped.
+
+Set `snapshotDirty: true` on a batch that changed what a joining client should see, so
+Portal refreshes the cached snapshot. Skip it and late joiners keep getting a stale total
+until the next dirty batch.
+
+### State, and what survives what
+
+Your extension is a **durable, per-channel instance** — one lives for each channel it is
+attached to, and it is yours alone.
+
+- **Instance fields persist across invocations.** `#total` is still there on the next
+  batch; you do not rebuild it every time.
+- **`ctx.storage` is for surviving a restart.** Instances are recycled once a channel is
+  idle long enough, and anything held only in memory goes with them. That is why `onInit`
+  reads `total` back.
+- **`onSnapshot` is not your recovery mechanism.** It answers "what should someone who
+  just arrived see?", never "what did I lose?". Recovery is `ctx.storage` plus `onInit`.
+- **`onShutdown` may never fire.** It is best effort and Portal does not wait for your
+  reply, so never leave work that matters until it arrives. Persist as you go, like the
+  `storage.put` in `onBatch`.
+
+**Batches arrive at least once.** After a network failure Portal may redeliver a batch you
+already handled. Each carries a `batchSeq` that counts up by one — if reprocessing would
+double-count, ignore any number you have already seen:
+
+```ts
+// file: extensions/idempotent.ts
+import type { BatchRequest, ExtensionContext } from "@portalsdk/extension-protocol";
+
+class Guarded {
+  #lastSeq = -1;
+
+  constructor(private ctx: ExtensionContext) {}
+
+  async onBatch({ batchSeq, messages }: BatchRequest) {
+    if (batchSeq <= this.#lastSeq) return; // already applied
+    this.#lastSeq = batchSeq;
+    await this.ctx.storage.put("lastSeq", batchSeq);
+    // ...apply `messages`
+  }
+}
+```
+
+## 2. Attach it and deploy
+
+The config points at the file; the namespace and transport come from the extension's own
+manifest. The **handle** you choose on the left is how the attachment is identified — and
+it is the key clients read the snapshot under, so pick it deliberately.
+
+```ts
+// file: portal.config.ts
+import { defineConfig } from "@portalsdk/config";
+
+export default defineConfig({
+  channels: {
+    "room-*": {
+      extensions: {
+        counter: "./extensions/counter.ts",
+      },
+    },
+  },
+});
+```
+
+```sh
+portal deploy
+```
+
+The CLI reads each attached extension's manifest, validates namespaces, bundles each
+extension separately, and uploads it.
+
+## 3. Consume it from the client
+
+There is **no extension client API** — no `useExtension`, nothing to import. An extension
+shows up through three surfaces you already have.
+
+### Sending: namespaced types
+
+`send()` is the entry point. A `type` carrying a namespace prefix is routed by that prefix
+against the transport map the connect frame provides, so a `ws` extension travels as an
+ephemeral frame and an `http` one as a publish — the call site looks identical either way:
+
+```ts
+// file: send.ts
+import { Portal } from "@portalsdk/core";
+
+declare const portal: Portal;
+const channel = portal.channel("room-42");
+
+await channel.send({ ephemeral: true, type: "counter.increment", content: {} });
+```
+
+Sending into a namespace whose extension is currently degraded rejects with
+`DegradedError`. The channel itself keeps working — a broken extension never takes the
+room down with it.
+
+### Live updates: `onMessage`
+
+Broadcasts arrive as ordinary channel messages. Filter by the namespace:
+
+```ts
+// file: live.ts
+import { Portal } from "@portalsdk/core";
+
+declare const portal: Portal;
+const channel = portal.channel("room-42");
+
+channel.on("message", (msg) => {
+  if (msg.type !== "counter.state") return;
+  const { total } = msg.content as { total: number };
+  console.log("total is now", total);
+});
+```
+
+### Joining late: `channel.ext`
+
+`channel.ext` is the record of extension snapshots from the connect frame, keyed by the
+handle you chose in `portal.config.ts`. It is the late joiner's whole story: present at
+`ready`, before any broadcast arrives.
+
+Blobs belong to the extension that produced them, so they are typed `unknown` — cast at
+the read site:
+
+```ts
+// file: late-join.ts
+import { Portal } from "@portalsdk/core";
+
+interface CounterState {
+  total: number;
+}
+
+declare const portal: Portal;
+const channel = portal.channel("room-42");
+
+const state = channel.ext?.["counter"] as CounterState | undefined;
+console.log("starting total", state?.total ?? 0);
+```
+
+Three rules worth internalizing:
+
+- **`undefined` before `ready`.** There is no snapshot until the connect frame lands.
+- **A degraded extension is key-absent, never null.** `ext.counter === undefined` means
+  "no snapshot available" — either the handle isn't attached, or its extension is
+  currently degraded. You never have to distinguish `null` from missing.
+- **The record is replaced wholesale on every `ready`, including reconnects.** A handle
+  that disappears between sessions disappears from `ext` too, so a stale blob can never
+  masquerade as live state.
+
+## The complete pair
+
+The extension above, and the React component that consumes it. Snapshot for the initial
+value, broadcasts for everything after — the same two sources, joined in one `useState`:
+
+```tsx
+// file: Counter.tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import { useChannel } from "@portalsdk/react";
+
+interface CounterState {
+  total: number;
+}
+
+export function Counter({ roomId }: { roomId: string }) {
+  const [total, setTotal] = useState<number | undefined>(undefined);
+
+  const { send, ext, status } = useChannel({
+    channelId: roomId,
+    onMessage: (msg) => {
+      // Live: every broadcast after we connected.
+      if (msg.type !== "counter.state") return;
+      setTotal((msg.content as CounterState).total);
+    },
+  });
+
+  // Late join: the snapshot is already here at ready, before any broadcast.
+  // Re-runs when a reconnect replaces the record, and never clobbers a newer live value.
+  useEffect(() => {
+    const snapshot = ext?.["counter"] as CounterState | undefined;
+    if (snapshot !== undefined) setTotal((current) => current ?? snapshot.total);
+  }, [ext]);
+
+  if (status !== "ready") return <p>Connecting…</p>;
+
+  return (
+    <div>
+      <p>Total: {total ?? 0}</p>
+      <button
+        onClick={() => {
+          void send({ ephemeral: true, type: "counter.increment", content: {} });
+        }}
+      >
+        Increment
+      </button>
+    </div>
+  );
+}
+```
+
+Open it in two tabs. The first increments and both stay in step through `counter.state`.
+Close the second, increment a few more times, then reopen it: it renders the correct
+total immediately — from `ext.counter`, with no replay and no round trip.
+
+## Limits and gotchas
+
+- **At most 5 extensions per channel**, each owning a distinct namespace.
+- **Validate `content` yourself.** Portal does not inspect what clients publish into your
+  namespace — `ExtensionMessage.content` is `unknown` on purpose.
+- **`epoch` increments when a channel restarts.** If you cache anything keyed to channel
+  lifetime, reset it when the epoch changes.
+- **Snapshots should stay small.** Every joining client receives the blob inline in the
+  connect frame; it is current state for rendering, not an archive.
+- **A degraded extension degrades alone.** Sends into its namespace reject with
+  `DegradedError` and its `ext` key vanishes, while the channel keeps delivering ordinary
+  messages.
+
+# Guide: In-app notifications
+
+A ticket-assignment notification that shows up in an inbox list and pops a toast the
+moment it arrives — deduplicated by the item's idempotency key, since deliveries can
+repeat.
+
+## Server-side: turn an event into a notification
+
+Notifications are created config-side, with a `notify` bridge on the channel your
+assignment messages go through (see
+[Authoring portal.config.ts → Notifications](/config-cli/portal-config#notifications)):
+
+```ts
+// file: portal.config.ts
+import { defineConfig } from "@portalsdk/config";
+
+interface AssignmentPayload {
+  ticketId: string;
+  title: string;
+}
+
+export default defineConfig({
+  channels: {
+    "tickets-*": {
+      notify: (ctx) => {
+        const assignedTo = ctx.message.to;
+        if (!assignedTo || ctx.message.type !== "ticket.assigned") return null;
+
+        const payload = ctx.message.content as AssignmentPayload;
+        return {
+          title: `You were assigned ${payload.title}`,
+          data: payload,
+          to: assignedTo,
+        };
+      },
+    },
+  },
+});
+```
+
+Your app sends the assignment as an ordinary directed message (`to`, plus a `type` to
+distinguish it from chat content); the config above turns matching sends into inbox
+items for the assignee.
+
+```ts
+import type { ChannelHandle } from "@portalsdk/core";
+
+interface AssignmentMessage {
+  ticketId: string;
+  title: string;
+}
+
+async function assignTicket(
+  channel: ChannelHandle<AssignmentMessage>,
+  userId: string,
+  ticketId: string,
+  title: string,
+) {
+  await channel.send({
+    type: "ticket.assigned",
+    to: userId,
+    content: { ticketId, title },
+  });
+}
+```
+
+## Client-side: list, and a toast on arrival
+
+`useInbox`'s `onItem` fires once per item arriving after mount — never for the backlog
+already present when the inbox becomes ready, and never twice for the same item, since
+`InboxItem.id` is the event's idempotency key and redelivery is deduped by that id. That
+makes it safe to append straight onto a toast list with no dedup bookkeeping of your own:
+
+```tsx
+// file: use-assignment-toasts.ts
+import { useState } from "react";
+import { useInbox } from "@portalsdk/react";
+
+interface AssignmentPayload {
+  ticketId: string;
+  title: string;
+}
+
+interface Toast {
+  id: string;
+  message: string;
+}
+
+export function useAssignmentToasts() {
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  useInbox<AssignmentPayload>({
+    onItem: (item) => {
+      if (item.type !== "ticket.assigned") return;
+      setToasts((current) => [
+        ...current,
+        { id: item.id, message: item.title ?? `Assigned: ${item.data.title}` },
+      ]);
+    },
+  });
+
+  function dismiss(id: string) {
+    setToasts((current) => current.filter((t) => t.id !== id));
+  }
+
+  return { toasts, dismiss };
+}
+```
+
+```tsx
+// file: notifications-toaster.tsx
+import { useAssignmentToasts } from "./use-assignment-toasts";
+
+export function NotificationsToaster() {
+  const { toasts, dismiss } = useAssignmentToasts();
+
+  return (
+    <div>
+      {toasts.map((t) => (
+        <div key={t.id} onClick={() => dismiss(t.id)}>
+          {t.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+`useAssignmentToasts` no longer needs the `Portal` client passed in at all — `useInbox`
+reads it from `PortalProvider`'s context on its own, same as any other call to the hook.
+
+## The persistent list
+
+For the inbox panel itself (not the toast), `useInbox`'s accumulated `items` is the
+right tool — no manual dedup needed there, since it's a snapshot of current state, not
+a stream of arrival events:
+
+```tsx
+import { useInbox } from "@portalsdk/react";
+
+interface AssignmentPayload {
+  ticketId: string;
+  title: string;
+}
+
+export function AssignmentInbox() {
+  const { items, unseen, markAllRead } = useInbox<AssignmentPayload>({
+    where: { type: { eq: "ticket.assigned" } },
+  });
+
+  return (
+    <div>
+      <button onClick={() => markAllRead()}>Clear ({unseen})</button>
+      <ul>
+        {items.map((item) => (
+          <li key={item.id} onClick={() => item.markAsRead()}>
+            {item.title} — {item.data.ticketId} {item.read ? "" : "•"}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+`markAllRead()` here is the global, zero-argument call — it clears every inbox item, not
+just the ones in this filtered view. Mark a single item read from the list itself with
+`item.markAsRead()`, which never cascades to older items.
+
+# Authoring portal.config.ts
+
+`@portalsdk/config` gives you type-safe authoring for your Portal config file —
+channels, authorization, message middleware, and notifications — all checked and
+autocompleted as you write them.
+
+```bash
+npm install -D @portalsdk/config
+```
+
+Create a `portal.config.ts` at the root of your project and export a config from
+`defineConfig`:
+
+```ts
+import { defineConfig } from "@portalsdk/config";
+
+export default defineConfig({
+  channels: {
+    "room-*": { anonymous: false },
+  },
+});
+```
+
+Every channel works with no configuration at all — a channel with no matching entry
+uses the defaults (standard mode, anonymous access allowed, no authorization, no
+middleware). Config entries exist only to override specific channels, so an empty
+config, or no config file at all, is perfectly valid.
+
+## Channels
+
+Keys are either an exact channel id or a template ending in `*`:
+
+```ts
+import { defineConfig } from "@portalsdk/config";
+
+export default defineConfig({
+  channels: {
+    announcements: { mode: "broadcast" }, // exact id
+    "room-vip-*": { anonymous: false }, // most specific template wins
+    "room-*": { anonymous: true },
+  },
+});
+```
+
+When more than one key could match a channel, the exact id wins; otherwise the most
+specific template does (the one with the longest fixed prefix).
+
+Each channel accepts:
+
+| Field | Meaning |
+| --- | --- |
+| `mode` | `"standard"` (default) or `"broadcast"`. Fixed when a channel is first created. |
+| `anonymous` | Whether anonymous users may connect. Defaults to `true`. |
+| `authz` | Authorize each connection and assign its capabilities. |
+| `onPublish` | Middleware run on every published message. |
+| `onDisconnect` | Callbacks run when a connection ends. |
+| `notify` | Turn selected messages into notifications. |
+| `extensions` | Attach extensions to the channel. |
+
+## Authentication
+
+By default, tokens are minted by Portal. To verify JWTs you issue yourself, add an
+`auth` block and map your token's claims onto Portal identity fields:
+
+```ts
+import { defineConfig } from "@portalsdk/config";
+
+export default defineConfig({
+  auth: {
+    issuer: "https://your-app.example.com",
+    jwksUrl: "https://your-app.example.com/.well-known/jwks.json",
+    claimMap: {
+      userId: "sub", // required
+      username: "name",
+      anon: "public_metadata.guest",
+    },
+  },
+});
+```
+
+Only `userId` is required. Add further entries to map additional claims by dotted path.
+This is the config-side counterpart of what a client hands the SDK as `token` — see
+[Tokens & auth](/core/tokens-and-auth).
+
+## Authorization
+
+An `authz` callback runs once, when a user connects. Return `allow(capabilities)` to
+admit them with a fixed set of permissions, or `block(reason)` to refuse:
+
+```ts
+import { defineConfig, allow, block } from "@portalsdk/config";
+
+export default defineConfig({
+  channels: {
+    "room-*": {
+      authz: (ctx) => {
+        if (ctx.claims.anon) return block("Sign in to join this room.");
+        return allow({ publish: true, sendDirect: true });
+      },
+    },
+  },
+});
+```
+
+Capabilities are your source of truth for what a session may do. Alongside the built-in
+`publish` and `sendDirect` flags you can add your own named capabilities and read them
+later in middleware — Portal carries them for you. Roles and permissions are entirely
+yours: they live only inside this callback and in the capabilities you return.
+
+If an `authz` callback throws or times out, the connection is refused — always.
+
+## Message middleware
+
+`onPublish` middleware run in order on every published message. Each step returns
+`allow()`, `block(reason)`, or `mask(content)`, and the first step that does not
+`allow()` ends the chain:
+
+```ts
+import { defineConfig, defineMiddleware, allow, block, mask } from "@portalsdk/config";
+
+interface ChatMessage {
+  body: string;
+}
+
+const moderate = defineMiddleware<ChatMessage>("publish", (ctx) => {
+  if (!ctx.capabilities.publish) {
+    return block("You do not have permission to post here.");
+  }
+
+  const text = ctx.message.content.body;
+  if (text.includes("badword")) {
+    return mask<ChatMessage>({ body: text.replaceAll("badword", "****") });
+  }
+
+  return allow();
+});
+
+export default defineConfig({
+  channels: {
+    "room-*": { onPublish: [moderate] },
+  },
+});
+```
+
+- **`block(reason)`** stops the message. The reason is shown to the sender (it surfaces
+  client-side as `BlockedError.reason` — see [Errors](/core/errors)), so write it as
+  end-user copy.
+- **`mask(content)`** lets the message through but replaces its content before anyone
+  sees it. The replacement flows to the rest of the chain and every recipient; the
+  original content is not stored.
+
+### Deferred work and retracting
+
+Register `defer()` work to run after a message is delivered. A deferred callback may
+return `retract()` to take the message back — recipients replace it in place, and it is
+left out of history and replay:
+
+```ts
+import { defineMiddleware, allow, retract } from "@portalsdk/config";
+
+defineMiddleware("publish", (ctx) => {
+  ctx.defer(async () => {
+    if (await isSpam(ctx.message)) return retract("Removed after review.");
+  });
+  return allow();
+});
+
+async function isSpam(_message: unknown): Promise<boolean> {
+  return false;
+}
+```
+
+Use `notify()` for fire-and-forget follow-up work once the outcome is final:
+
+```ts
+import { defineMiddleware, allow } from "@portalsdk/config";
+
+defineMiddleware("publish", (ctx) => {
+  ctx.notify(async (outcome) => {
+    if (outcome.action === "block") await log(outcome.reason);
+  });
+  return allow();
+});
+
+async function log(_reason: string) {}
+```
+
+### Disconnect callbacks
+
+`onDisconnect` callbacks run when a connection ends. They observe only — they cannot
+reject anything:
+
+```ts
+import { defineMiddleware } from "@portalsdk/config";
+
+const onLeave = defineMiddleware("disconnect", (ctx) => {
+  ctx.notify(async () => track(ctx.sender.id, ctx.reason));
+});
+
+async function track(_userId: string, _reason: string) {}
+```
+
+## Notifications
+
+A `notify` bridge turns selected messages into notifications for their recipients.
+Return a descriptor to create one, or `null` to leave the message as an ordinary
+message:
+
+```ts
+import { defineConfig } from "@portalsdk/config";
+
+export default defineConfig({
+  channels: {
+    "room-*": {
+      notify: (ctx) => {
+        const mentions = ctx.message.mentions ?? [];
+        if (mentions.length === 0) return null;
+        return {
+          title: "You were mentioned",
+          data: { messageId: ctx.message.id },
+          to: mentions.map((m) => m.userId),
+        };
+      },
+    },
+  },
+});
+```
+
+By default the recipient is the message's `to`; set `to` on the descriptor to override
+or fan out to several users. Each notification a `notify` bridge creates is what shows
+up client-side as an `InboxItem` — see [Inbox](/core/inbox).
+
+## Secrets
+
+Read a project secret from inside a callback with `env()`. Set secrets with
+`portal secrets set NAME` (see [Deploy & secrets](/config-cli/deploy-and-secrets)); the
+value is resolved when your deployed callbacks run and is never written into your
+configuration:
+
+```ts
+import { defineMiddleware, allow, block, env } from "@portalsdk/config";
+
+defineMiddleware("publish", async (ctx) => {
+  const flagged = await moderate(ctx.message.content, env("MODERATION_API_KEY"));
+  return flagged ? block("This message was held for review.") : allow();
+});
+
+async function moderate(_content: unknown, _apiKey: string): Promise<boolean> {
+  return false;
+}
+```
+
+`env()` throws `MissingSecretError` if the named secret has not been set.
+
+## Extensions
+
+Extensions add their own message types to a channel. Attach one by mapping a handle you
+choose to the source file that implements it:
+
+```ts
+import { defineConfig } from "@portalsdk/config";
+
+export default defineConfig({
+  channels: {
+    "room-*": {
+      extensions: {
+        polls: "src/extensions/polls.ts",
+      },
+    },
+  },
+});
+```
+
+An extension declares what it owns through a static manifest. Use `defineExtension` so
+that manifest is type-checked:
+
+```ts
+import {
+  defineExtension,
+  type BatchRequest,
+  type ExtensionManifest,
+} from "@portalsdk/config";
+
+class Polls {
+  static manifest: ExtensionManifest = {
+    namespace: "poll.", // every message type this extension owns starts with "poll."
+    transport: "ws",
+  };
+
+  // The one required handler: Portal calls it with each batch of messages
+  // published to this namespace. See the extensions guide for a complete example.
+  async onBatch({ messages }: BatchRequest) {
+    for (const message of messages) {
+      console.log(message.type, message.content);
+    }
+  }
+}
+
+export default defineExtension(Polls);
+```
+
+## Typing message content
+
+Pass your message type to `defineMiddleware` to type `ctx.message.content`:
+
+```ts
+import { defineMiddleware, allow } from "@portalsdk/config";
+
+interface ChatMessage {
+  body: string;
+  attachments?: string[];
+}
+
+defineMiddleware<ChatMessage>("publish", (ctx) => {
+  ctx.message.content.body; // typed as string
+  return allow();
+});
+```
+
+# Wire protocol
+
+`@portalsdk/core` and `@portalsdk/react` cover everything most apps need. This page is
+for the smaller audience building against the wire directly — implementing a client in
+another language, debugging at the frame level, or just curious what's actually on the
+socket underneath `useChannel`. It describes the client-observable v1 protocol: the
+WebSocket frames, the small HTTP surface the SDK calls, and the rules that make a
+client implementable. Platform-internal mechanics (topology, storage, process
+lifecycle) aren't part of this — they're not observable from a client anyway.
+
+`@portalsdk/wire-protocol` is the reference implementation of everything on this page:
+the frame types, the pure parse/serialize functions, and the version/URL constants.
+Most applications never need it directly — reach for it only if you're implementing a
+Portal client or server yourself, not if you're consuming Portal through
+`@portalsdk/core`.
+
+```bash
+npm install @portalsdk/wire-protocol
+```
+
+## Connection lifecycle
+
+### Opening a channel socket
+
+A client opens a channel by upgrading a WebSocket connection:
+
+```
+GET wss://realtime.useportal.co/v1/channels/{channelId}?v=1&token={jwt}&leaf={hint?}&meta={base64(json)?}
+```
+
+- `v` — protocol version. Required. An unknown version gets HTTP 426.
+- `token` — the signed JWT identifying the user; the app's API key is resolved from it.
+- `leaf` — an opaque sticky-routing hint, echoed back from a previous `ready` frame on
+  reconnect.
+- `meta` — initial presence metadata (standard channels only), base64-encoded JSON, capped
+  at 1KB decoded — the wire-level counterpart of `ChannelOptions.metadata` in
+  `@portalsdk/core`.
+
+If the upgrade is refused, the server responds with an HTTP 4xx and a JSON body
+`{ code, reason? }` (also echoed in an `x-portal-error` header):
+
+| HTTP | `code` |
+| --- | --- |
+| 401 | `invalid_token`, `token_expired` |
+| 403 | `invalid_api_key`, `not_member`, `banned`, `anonymous_not_allowed` |
+| 404 | `unknown_channel` |
+| 426 | `unsupported_version` |
+| 429 | `channel_at_capacity` (body includes `retryAfter`, in seconds) |
+
+These are the wire-level codes behind the `PortalError` subclasses documented in
+[Errors](/core/errors).
+
+### The `ready` frame
+
+The very first frame the server sends, exactly once per connection, is `ready`. It
+carries everything the client needs to initialize: the channel's info, the connecting
+user's verified identity (`me`), a starting sequence number for gap detection, the
+sticky-routing `leaf` to echo back on reconnect, the current presence snapshot, the
+inbox-independent channel watermark, and an extension-namespace routing table
+(`bindings`) that lets `send()` route extension traffic to the right transport.
+
+Initial message history is deliberately **not** part of the `ready` snapshot — the SDK
+issues a separate `GET /history` call (see below) in parallel with the upgrade whenever
+`history !== "none"`.
+
+### Keepalive and reconnect
+
+A lightweight `{"t":"ping"}` / `{"t":"pong"}` pair keeps the connection alive roughly
+every 25 seconds — entirely internal to the SDK, never something application code
+touches.
+
+On reconnect, the client repeats the same upgrade URL with `last={seq}` added: the
+server replays anything missed since that sequence number where it still has it, and
+`ready` always arrives first, carrying the current head — a client's own reconnect
+logic doesn't need to reason about ordering beyond "process `ready`, then whatever
+follows."
+
+## Frames on the channel socket
+
+**Server → client:**
+
+- `batch` — the actual data frame. One or more messages, coalesced; sequence-contiguous
+  within a single connection's stream.
+- `retract` — `{ id, seq, reason? }`. A message was taken back; the client mutates it
+  in place rather than removing it (`Message.retracted` flips to `true`; content is
+  stripped).
+- `presence` — mode-shaped: `{ kind: "detailed", joined, left, count }` for smaller
+  rooms, or `{ kind: "aggregate", count, recent }` for larger ones. This is the wire
+  source for `ChannelHandle.presence`.
+- `activity` — `{ userId, kind, since }`. Absence expires client-side after roughly 5
+  seconds with no refresh — the mechanism behind `typing`/`activity` clearing on their
+  own.
+- `direct` — a message targeted only at this connection (not fanned out).
+- `reassign` — `{ leaf }`. A topology-control frame telling the client to redirect its
+  sticky routing hint; purely a transport concern.
+- `error` — `{ code, reason?, ref? }`. `ref` correlates the error back to a specific
+  client-sent frame when relevant (see `ephemeral` below).
+
+Every message on the wire — persistent or ephemeral — shares one envelope shape: `id`,
+`seq` (`null` for ephemeral messages, which have no ordering guarantee), `type`, `kind`,
+opaque `content` (≤2KB), `sender` (`{ id, anon, username? }` — `username` only on
+broadcast channels), `timestamp`, optional `to`/`mentions`, and `retracted`/`ephemeral`
+flags. This is exactly the shape `Message<M>` in `@portalsdk/core` is built from.
+
+**Client → server** (persistent publishes go over HTTP, not the socket — see below):
+
+- `ephemeral` — `{ t: "ephemeral", cl, type, content }`. `cl` is a client-chosen tag
+  used to correlate a rejection (`error.ref`) back to this specific send; this is also
+  the frame extension traffic rides on. This is the wire form of
+  `channel.send({ ephemeral: true, ... })`.
+- `activity` — `{ kind }`, throttled client-side to roughly every 3 seconds. The wire
+  form of `sendActivity`/`sendTyping`.
+- `watermark` — `{ seq }`. The wire form of `markAsRead()`.
+- `meta` — `{ metadata }`. Replaces presence metadata wholesale — the wire form of
+  `setMetadata()`. As on the SDK surface, there's no built-in throttling here; sending
+  it often means broadcasting the full bag that often.
+- `ping` — keepalive, SDK-internal.
+
+The same admission gates that apply to HTTP publishes apply here; a refusal comes back
+as an `error` frame, using `ref` to identify which upstream frame it refers to.
+
+## HTTP surface
+
+Three endpoints, all authenticated with `authorization: Bearer {jwt}`:
+
+- **Publish** — `POST /v1/channels/{channelId}/messages` with
+  `{ type?, content, kind?, to?, mentions? }`, returning `200 { id, seq, timestamp }`
+  (the `SendAck` a persistent `send()` resolves with) or a `4xx { code, reason? }` (a
+  `blocked_by_middleware` code carries the end-user-visible `reason` that surfaces as
+  `BlockedError.reason`).
+- **History** — `GET /v1/channels/{channelId}/history`, either `?before={seq}&limit=50`
+  for scrolling up, or `?from={seq}&to={seq}` for filling a detected gap. Returns
+  `{ msgs, hasMore }`; retracted messages come back as tombstoned envelopes.
+- **Members** — `GET /v1/channels/{channelId}/members?cursor=...`, returning
+  `{ members: [{ userId, online, claims }], cursor? }` — the wire source for
+  `members()`.
+
+## Ordering, dedup, and gap-fill
+
+Persistent messages get a per-channel `seq` at the moment they're persisted, and are
+contiguous within any one connection's stream; ephemeral messages carry `seq: null` and
+make no ordering promise at all. Clients dedup persistent messages by high-water mark
+plus a small trailing window of seen `seq` values; `direct` frames and inbox items dedup
+by `id` instead.
+
+A gap is detected whenever a delivered `seq` is greater than `(held seq) + 1`. Filling
+one is layered: first, a `last={seq}` reconnect replay; failing that, a direct HTTP
+range fetch (with a small 0–2s client-side jitter, to avoid a reconnect storm hammering
+the history endpoint at once). A retraction that references a `seq` the client doesn't
+currently hold is kept in a tombstone set and applied the moment that message does
+arrive.
+
+## The inbox socket
+
+A separate upgrade: `GET wss://realtime.useportal.co/inbox?v=1&token={jwt}`. An
+anonymous token is refused with 403 `anonymous_not_allowed` — there's no inbox for an
+identity that doesn't persist across sessions, matching `portal.inbox()`'s
+permanently-empty behavior for anonymous users described in [Inbox](/core/inbox).
+
+**Server → client:** `ready` (`{ entries, items, counter }`, the inbox's own initial
+snapshot), `entry` (an `InboxEntry` row upsert), `item` (a targeted item arriving —
+what fires `InboxHandle`'s `"item"` event), `counter` (badge update).
+
+**Client → server:** `read` (`{ channelId }` — advances the *inbox* position for a
+channel, independent of that channel's own watermark), `item.read` (`{ id }`),
+`read.all` (zero-argument, global — the wire form of `markAllRead()`), `mute`
+(`{ channelId, muted }`), `ping`.
+
+## Versioning
+
+`?v=1` is required on both sockets; an unrecognized version is refused with 426. Within
+v1, evolution is additive only — new frame types or fields that an older client simply
+ignores. Anything that would break an existing client bumps the version instead.
+
+## Reserved surfaces
+
+A handful of surfaces are typed into the protocol but deliberately rejected in v1 — a
+client that sends one gets a loud error, not a silent no-op, and named as
+`NotYetSupportedError` at the `@portalsdk/core` layer:
+
+- media/attachment frames and upload URLs
+- read-receipt reflection frames
+- server-pushed-down `where` filtering (client-side filtering via `channel.view()`
+  works today; server-side pushdown does not)
+- webhook/event-bus surfaces
+- forward paging (`loadNext` — only backward paging via `loadPrevious()` exists in v1)
+
+# useInbox
+
+`useInbox` subscribes a component to the inbox. It's a thin binding over core's lazy
+inbox singleton — and it deliberately reads from *two* stores: the global `InboxHandle`
+(which carries the app-wide `counter` and `status`, and owns `markAllRead`) and a
+filtered `InboxView` (which carries this view's `channels`, `items`, and `unseen`).
+That's why `counter` is global — it ignores this call's filter — while `unseen` is
+scoped to it.
+
+```tsx
+import { useInbox } from "@portalsdk/react";
+
+function InboxBadge() {
+  const { counter } = useInbox();
+  return <span>{counter}</span>;
+}
+```
+
+## Params
+
+`useInbox(params?)` takes the same query shape as `inbox.view()` in core, plus `onItem`:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `channelId` | `string` | Scope the whole view (items + entry) to one channel. |
+| `where` | `InboxWhere<D>` | Filter items by scalar fields of your item data, plus `type`, `channelId`, `read`, `muted`. |
+| `onItem` | `(item: InboxItem<D>) => void` | Fires once per item arriving after mount. |
+
+```tsx
+import { useInbox } from "@portalsdk/react";
+
+interface AssignmentPayload {
+  ticketId: string;
+}
+
+function AssignmentList() {
+  const { items, unseen } = useInbox<AssignmentPayload>({
+    where: { type: { eq: "ticket.assigned" } },
+  });
+
+  return (
+    <div>
+      <p>{unseen} unseen</p>
+      <ul>
+        {items.map((item) => (
+          <li key={item.id}>{item.data.ticketId}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+## Result
+
+`useInbox` returns `channels`, `items`, `counter` (global), `unseen` (scoped to this
+view's filter), `markAllRead` (global, zero-argument), and `status`.
+
+```tsx
+import { useInbox } from "@portalsdk/react";
+
+function InboxPanel() {
+  const { channels, items, counter, markAllRead, status } = useInbox();
+
+  return (
+    <div>
+      <p>
+        {status} — {counter} unread
+      </p>
+      <button onClick={() => markAllRead()}>Mark all read</button>
+      <ul>
+        {channels.map((c) => (
+          <li key={c.id}>
+            {c.name ?? c.id}: {c.unread}
+          </li>
+        ))}
+      </ul>
+      <ul>
+        {items.map((item) => (
+          <li key={item.id}>{item.title ?? item.type}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+## Reacting to arrival with `onItem`
+
+`items` is the accumulated, reactive list — right for rendering a panel. For a one-shot
+reaction to a new item arriving (a toast, a sound, an analytics call), use `onItem` instead
+of diffing `items` yourself:
+
+```tsx
+import { useInbox } from "@portalsdk/react";
+
+function InboxToaster() {
+  useInbox({
+    onItem: (item) => {
+      if (item.type === "ticket.assigned") showToast(item.title ?? "New assignment");
+    },
+  });
+  return null;
+}
+
+function showToast(_message: string) {}
+```
+
+Firing semantics, inherited from [the underlying core event](/core/inbox#reacting-to-new-items):
+
+- **Never fires for the items already present when the inbox becomes ready** — only for a
+  genuinely new arrival after that. Render the initial backlog from `items` instead.
+- **Never fires twice for the same item** — a redelivered item updates its data in `items`
+  but doesn't re-announce itself. `item.id` is the notification's idempotency key, so this
+  falls out of the same guarantee.
+- **Stable-ref**: passing a fresh inline callback on every render doesn't drop a
+  subsequently-arriving item and doesn't re-subscribe.
+
+See [In-app notifications](/guides/in-app-notifications) for this pattern applied to a full
+toast component with dismiss handling.
+
+# Guide: Live cursors (React)
+
+Other users' cursors, rendered live over a shared surface: a coarse, "last known"
+position carried in presence metadata so newly-joined viewers see something
+immediately, and a stream of ephemeral sends for smooth movement in between.
+
+## Why two channels of data
+
+- **Presence metadata** (`setMetadata`) replaces your whole metadata bag and is
+  re-announced to everyone through ordinary presence updates. It's the right place for
+  a "last known position," because anyone who joins mid-session gets it for free as
+  part of the room's presence snapshot — but every call re-broadcasts the *entire* bag
+  to the room, and nothing in the SDK throttles it for you, so the guide below
+  hand-rolls a throttle.
+- **Ephemeral sends** (`send({ ephemeral: true, ... })`) are exactly what the core
+  README calls out cursors for: no persistence, no `seq`, no history — a pure live
+  signal. They're the right choice for firing on every `pointermove`, which presence
+  metadata is not.
+
+So: ephemeral sends carry the live movement, and a throttled `setMetadata` call keeps a
+reasonably fresh fallback position in presence for anyone who wasn't already watching.
+
+## The component
+
+```tsx
+"use client";
+
+import { useRef, useState } from "react";
+import type { PointerEvent } from "react";
+import { useChannel } from "@portalsdk/react";
+
+interface CursorPosition {
+  x: number;
+  y: number;
+}
+
+// Distinguishes cursor traffic from any other content type sharing this channel.
+const CURSOR_TYPE = "cursor";
+const METADATA_THROTTLE_MS = 250;
+
+export function LiveCursors({ roomId }: { roomId: string }) {
+  const [cursors, setCursors] = useState<Record<string, CursorPosition>>({});
+  const lastMetadataSend = useRef(0);
+
+  const { send, setMetadata, presence } = useChannel<CursorPosition>({
+    channelId: roomId,
+    onMessage: (msg) => {
+      if (!msg.ephemeral || msg.type !== CURSOR_TYPE) return;
+      setCursors((current) => ({ ...current, [msg.sender.id]: msg.content }));
+    },
+  });
+
+  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
+    const position: CursorPosition = { x: e.clientX, y: e.clientY };
+
+    void send({ ephemeral: true, type: CURSOR_TYPE, content: position });
+
+    const now = Date.now();
+    if (now - lastMetadataSend.current > METADATA_THROTTLE_MS) {
+      lastMetadataSend.current = now;
+      setMetadata({ cursor: position });
+    }
+  }
+
+  const fallback: Array<{ id: string; position: CursorPosition }> = [];
+  if (presence?.kind === "detailed") {
+    for (const p of presence.participants) {
+      const cursor = p.metadata?.cursor;
+      if (cursor) fallback.push({ id: p.id, position: cursor as CursorPosition });
+    }
+  }
+
+  return (
+    <div
+      onPointerMove={onPointerMove}
+      style={{ position: "relative", width: "100%", height: "100%" }}
+    >
+      {fallback
+        .filter((c) => !(c.id in cursors))
+        .map((c) => (
+          <Cursor key={c.id} label={c.id} position={c.position} />
+        ))}
+      {Object.entries(cursors).map(([userId, position]) => (
+        <Cursor key={userId} label={userId} position={position} />
+      ))}
+    </div>
+  );
+}
+
+function Cursor({ label, position }: { label: string; position: CursorPosition }) {
+  return (
+    <div
+      style={{ position: "absolute", left: position.x, top: position.y, pointerEvents: "none" }}
+    >
+      {label}
+    </div>
+  );
+}
+```
+
+Both signals go through `useChannel` directly — `onMessage` for the live ephemeral stream
+and `setMetadata` for the throttled presence fallback. Neither requires reaching for the
+core client yourself; see [useChannel](/react/use-channel#reacting-to-every-message-and-updating-presence-metadata)
+for both on their own.
+
+# Deploy & secrets
+
+`@portalsdk/cli` is the Portal command line: two commands, deploy your configuration and
+set secrets.
+
+```bash
+npm install -g @portalsdk/cli
+# or run without installing:
+npx @portalsdk/cli deploy
+```
+
+## Authenticate
+
+Every command needs your project's **secret** key (`sk_...`):
+
+```bash
+export PORTAL_SECRET=sk_your_secret_key
+```
+
+## `portal deploy`
+
+Deploys the `portal.config.ts` in the current directory (or `--config <path>`). Your
+config is authored with
+[`@portalsdk/config`](https://www.npmjs.com/package/@portalsdk/config) — see
+[Authoring portal.config.ts](/config-cli/portal-config).
+
+```bash
+portal deploy
+```
+
+```
+✓ Deployed portal.config.ts
+  Version cfg_01j…
+  3 channel overrides: live-events, room-*, support
+  Uploaded: hooks, 1 extension
+```
+
+Deploying is atomic — if anything fails, nothing changes. Channels with active
+connections keep their current configuration until they restart; new connections use
+the new version right away.
+
+Options:
+
+- `-c, --config <path>` — path to your config file (default: `portal.config.ts`).
+
+## `portal secrets set <name>`
+
+Sets a secret your config reads with `env("NAME")` (see
+[Authoring portal.config.ts → Secrets](/config-cli/portal-config#secrets)). The value is
+sent once and never printed.
+
+```bash
+# from a flag
+portal secrets set OPENAI_API_KEY --value sk-...
+
+# or piped on stdin
+echo -n "sk-..." | portal secrets set OPENAI_API_KEY
+
+# or typed at a hidden prompt
+portal secrets set OPENAI_API_KEY
+```
+
+## Environment
+
+| Variable | Purpose |
+| --- | --- |
+| `PORTAL_SECRET` | Your project secret key (`sk_...`). Required. |
+| `PORTAL_API_URL` | Override the API base URL (for local development). Optional. |
+
+# PortalProvider
+
+`@portalsdk/react` is a thin hook layer over `@portalsdk/core` — the hooks are selectors
+over core's reactive stores (via `useSyncExternalStore`), and they never own
+connections: mounting a component that calls `useChannel` opens the socket, and
+unmounting releases it.
+
+```bash
+npm install @portalsdk/react @portalsdk/core
+```
+
+`react` (`>=18 <20`) is a peer dependency.
+
+`PortalProvider` supplies a `Portal` client to every hook beneath it in the tree:
+
+```tsx
+import { Portal } from "@portalsdk/core";
+import { PortalProvider, useChannel } from "@portalsdk/react";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+
+interface ChatMessage {
+  text: string;
+}
+
+function Lobby() {
+  const { messages } = useChannel<ChatMessage>({ channelId: "lobby" });
+  return (
+    <ul>
+      {messages.map((m) => (
+        <li key={m.id}>{m.content.text}</li>
+      ))}
+    </ul>
+  );
+}
+
+export function App() {
+  return (
+    <PortalProvider client={portal}>
+      <Lobby />
+    </PortalProvider>
+  );
+}
+```
+
+## Props
+
+| Prop | Type | Notes |
+| --- | --- | --- |
+| `client` | `Portal` | Required. The provider is otherwise passive — it just publishes `client` on context. Its lifecycle stays owned by whoever constructed it. |
+| `token` | `string \| (() => string \| Promise<string>) \| undefined` | Optional. Forwarded to `client.setToken`. |
+| `children` | `ReactNode` | |
+
+Connections are opened and closed by the hooks (via the handle refcount), not by the
+provider itself — the provider never touches the network on its own.
+
+## Driving login/logout through `token`
+
+```tsx
+import { useState } from "react";
+import { Portal } from "@portalsdk/core";
+import { PortalProvider, useChannel } from "@portalsdk/react";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+
+async function fetchPortalToken(): Promise<string> {
+  const res = await fetch("/api/portal-token", { credentials: "include" });
+  const { token } = (await res.json()) as { token: string };
+  return token;
+}
+
+interface ChatMessage {
+  text: string;
+}
+
+function Lobby() {
+  const { messages } = useChannel<ChatMessage>({ channelId: "lobby" });
+  return (
+    <ul>
+      {messages.map((m) => (
+        <li key={m.id}>{m.content.text}</li>
+      ))}
+    </ul>
+  );
+}
+
+export function App() {
+  const [signedIn, setSignedIn] = useState(false);
+
+  return (
+    <PortalProvider client={portal} token={signedIn ? fetchPortalToken : undefined}>
+      <Lobby />
+      <button onClick={() => setSignedIn(true)}>Sign in</button>
+      <button onClick={() => setSignedIn(false)}>Sign out</button>
+    </PortalProvider>
+  );
+}
+```
+
+A fresh inline callback on every render does **not** reconnect — only an actual change
+of value or kind (string ↔ callback ↔ `undefined`) does, so `token={fetchPortalToken}`
+above is safe to pass as a new closure each render. Omitting `token` entirely (as
+opposed to passing `undefined`) leaves the client's own credential untouched — useful
+when something other than this provider owns login state.
+
+See [Tokens & auth](/core/tokens-and-auth) for what changing the token does to
+already-mounted channels and the inbox.
+
+# Guide: Webhooks
+
+Portal can relay every channel message to a server you control — a signed HTTP `POST`
+for each `message.published` and `message.retracted` event, independent of whether
+anyone is connected to the channel at the time. Use it to fan messages out to a data
+warehouse, trigger backend workflows, or keep a system of record in sync, without
+running a WebSocket client of your own.
+
+## Configure an endpoint
+
+Set `webhooks` at the project level in `portal.config.ts` — it isn't a per-channel
+setting, one endpoint covers every channel in the project:
+
+```ts
+// file: portal.config.ts
+import { defineConfig } from "@portalsdk/config";
+
+export default defineConfig({
+  webhooks: {
+    url: "https://api.yourapp.example.com/portal/webhooks",
+  },
+});
+```
+
+```sh
+portal deploy
+```
+
+`portal deploy` validates the URL before uploading anything:
+
+- **`https` only** — `http` is accepted solely for `localhost`, `127.0.0.1`, or `[::1]`,
+  for local development.
+- **No private or internal addresses** — RFC 1918 ranges (`10.0.0.0/8`,
+  `172.16.0.0/12`, `192.168.0.0/16`), link-local and loopback addresses, an
+  `.internal`/`.localhost` hostname, and their IPv6 equivalents are all rejected.
+
+A config that fails either check is refused at deploy time, not discovered later as
+silently-failing deliveries. Set `webhooks` to `null` (or omit it) to disable delivery —
+see [Authoring portal.config.ts](/config-cli/portal-config) for the rest of the config
+surface, and [Deploy & secrets](/config-cli/deploy-and-secrets) for `portal deploy`
+itself.
+
+A per-environment signing secret is minted automatically the first time a
+webhook-bearing config is activated — you don't provision it yourself. Fetch it with
+`GET /v1/webhooks/secret` when you get to verification, below.
+
+## Events
+
+Two event types, one for every persisted message and one for every retraction:
+
+| `type` | Fires when |
+| --- | --- |
+| `message.published` | A message is persisted to a channel (server or client publish). |
+| `message.retracted` | A previously-published message is retracted. |
+
+Every delivery is a JSON body shaped:
+
+```json
+{
+  "id": "m_1752912000_42",
+  "type": "message.published",
+  "timestamp": 1752912000000,
+  "environmentId": "env_abc123",
+  "channelId": "chat-general",
+  "data": {
+    "id": "m_1752912000_42",
+    "seq": 42,
+    "type": "message",
+    "kind": "text",
+    "content": { "text": "hello world" },
+    "sender": { "id": "u_123", "anon": false },
+    "timestamp": 1752912000000,
+    "retracted": false,
+    "ephemeral": false
+  }
+}
+```
+
+- **`id`** — the event id. For `message.published` this is the message id; for
+  `message.retracted` it's `retract_{messageId}` (a distinct id from the publish event,
+  since it's a separate delivery).
+- **`timestamp`** — epoch milliseconds.
+- **`environmentId`** / **`channelId`** — where the event happened.
+- **`data`** — the message envelope itself, in the exact shape documented in
+  [Wire protocol → Frames on the channel socket](/wire-protocol#frames-on-the-channel-socket)
+  (`id`, `seq`, `type`, `kind`, `content`, `sender`, `timestamp`, optional `to`/`mentions`,
+  `retracted`, `ephemeral`). Ephemeral messages are never delivered as webhooks — there's
+  nothing persisted to relay.
+
+For `message.retracted`, `data` is that same envelope in its tombstoned form —
+`retracted: true`, `content: null` — matching how a retraction already appears in
+`GET /v1/channels/{channelId}/history`. It does **not** carry a retraction `reason`; that
+field belongs to the wire-level `retract` frame, not the message envelope, so it isn't
+part of the webhook payload in v1.
+
+## Verifying signatures
+
+**Do this before processing any delivery.** Every request carries a `portal-signature`
+header:
+
+```
+portal-signature: t=1752912000,v1=3f9a2b1c...
+```
+
+`t` is the signing timestamp (Unix seconds); `v1` is the hex-encoded
+`HMAC-SHA256(secret, "{t}.{rawBody}")`, where `rawBody` is the exact request body bytes
+Portal sent — not a re-serialized version of the parsed JSON, which is not guaranteed to
+match byte-for-byte. Most frameworks parse the body before your handler runs, so make
+sure you capture the raw bytes (e.g. Express's `express.raw({ type: "application/json" })`
+ahead of your route, rather than the default JSON body parser).
+
+Fetch the secret with a secret key, server-side:
+
+```
+GET /v1/webhooks/secret
+Authorization: Bearer sk_your_secret_key
+```
+
+It returns `{ "secret": "whsec_..." }` — cache it; it's stable across deploys and only
+changes if you rotate it. `404` means no webhook secret exists yet for the environment
+(webhooks aren't configured).
+
+A complete verification function, constant-time comparison and timestamp tolerance
+included:
+
+```ts
+// file: verify-webhook.ts
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+const TOLERANCE_SECONDS = 5 * 60;
+
+export class WebhookVerificationError extends Error {}
+
+export function verifyWebhookSignature(
+  rawBody: string,
+  signatureHeader: string | undefined,
+  secret: string,
+): void {
+  if (!signatureHeader) {
+    throw new WebhookVerificationError("Missing portal-signature header.");
+  }
+
+  const parts = new Map<string, string>();
+  for (const pair of signatureHeader.split(",")) {
+    const [key, value] = pair.split("=");
+    if (key && value) parts.set(key, value);
+  }
+
+  const t = parts.get("t");
+  const v1 = parts.get("v1");
+  if (!t || !v1) {
+    throw new WebhookVerificationError("Malformed portal-signature header.");
+  }
+
+  const age = Math.abs(Date.now() / 1000 - Number(t));
+  if (!Number.isFinite(age) || age > TOLERANCE_SECONDS) {
+    throw new WebhookVerificationError("Signature timestamp outside tolerance.");
+  }
+
+  const expected = createHmac("sha256", secret).update(`${t}.${rawBody}`).digest("hex");
+  const expectedBytes = Buffer.from(expected, "hex");
+  const providedBytes = Buffer.from(v1, "hex");
+
+  const signatureMatches =
+    expectedBytes.length === providedBytes.length &&
+    timingSafeEqual(expectedBytes, providedBytes);
+
+  if (!signatureMatches) {
+    throw new WebhookVerificationError("Signature does not match.");
+  }
+}
+```
+
+The tolerance window (5 minutes above — pick whatever fits your clock skew and network
+conditions) rejects replayed deliveries whose timestamp has aged out, even if the
+signature itself still matches. Reject anything that fails verification with a non-2xx
+response and do not process its body.
+
+## Delivery model
+
+Delivery is **at-least-once**: a delivery that fails is retried on a backoff schedule —
+30s, 5m, 30m, 2h, 6h — and marked `dropped` if every attempt fails. Because retries and
+occasional redelivery are both possible, **dedupe on the top-level `id`** before acting
+on an event, not on a request-level property of your own:
+
+```ts
+// file: webhook-handler.ts
+import { verifyWebhookSignature, WebhookVerificationError } from "./verify-webhook";
+
+interface WebhookEvent {
+  id: string;
+  type: "message.published" | "message.retracted";
+  timestamp: number;
+  environmentId: string;
+  channelId: string;
+  data: unknown;
+}
+
+declare function alreadyProcessed(eventId: string): Promise<boolean>;
+declare function markProcessed(eventId: string): Promise<void>;
+declare function handle(event: WebhookEvent): Promise<void>;
+
+async function onWebhookRequest(rawBody: string, signatureHeader: string | undefined, secret: string) {
+  try {
+    verifyWebhookSignature(rawBody, signatureHeader, secret);
+  } catch (err) {
+    if (err instanceof WebhookVerificationError) {
+      return { status: 401 as const };
+    }
+    throw err;
+  }
+
+  const event = JSON.parse(rawBody) as WebhookEvent;
+  if (await alreadyProcessed(event.id)) {
+    return { status: 200 as const }; // already handled — ack without reprocessing
+  }
+
+  await handle(event);
+  await markProcessed(event.id);
+  return { status: 200 as const };
+}
+```
+
+Inspect delivery history directly rather than only relying on your own logs:
+
+```
+GET /v1/webhooks/deliveries?status=dropped&limit=50
+Authorization: Bearer sk_your_secret_key
+```
+
+Each row carries `status` (`pending` / `delivered` / `dropped`), `attempts`, `lastError`,
+and `nextAttemptAt` where relevant — the delivery ledger is itself the dead-letter store
+for anything that exhausted its retries. `delivered` and `dropped` rows are retained for
+roughly 7 days; filter with `status` and page with `limit` (default 50, max 500).
+
+# Guide: Realtime chat
+
+A complete per-room chat channel: message history, sending, presence, and membership —
+built entirely on `@portalsdk/core` and `@portalsdk/react`'s published surface.
+
+## The room component
+
+```tsx
+// file: chat-room.tsx
+"use client";
+
+import { useState, type FormEvent } from "react";
+import { useChannel } from "@portalsdk/react";
+import type { UseChannelResult } from "@portalsdk/react";
+
+interface ChatMessage {
+  body: string;
+}
+
+export function ChatRoom({ roomId }: { roomId: string }) {
+  const [draft, setDraft] = useState("");
+  const {
+    messages,
+    send,
+    loadPrevious,
+    hasPrevious,
+    isLoadingPrevious,
+    presence,
+    typing,
+    sendTyping,
+    status,
+  } = useChannel<ChatMessage>({ channelId: roomId, history: 30 });
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (draft.trim() === "") return;
+    await send({ content: { body: draft } });
+    setDraft("");
+  }
+
+  return (
+    <div>
+      <p>status: {status}</p>
+
+      {hasPrevious && (
+        <button disabled={isLoadingPrevious} onClick={() => loadPrevious()}>
+          {isLoadingPrevious ? "Loading…" : "Load older messages"}
+        </button>
+      )}
+
+      <ul>
+        {messages.map((m) => (
+          <li key={m.id}>
+            <strong>{m.sender.id}</strong>: {m.content.body}
+          </li>
+        ))}
+      </ul>
+
+      {typing.length > 0 && <p>{typing.join(", ")} typing…</p>}
+
+      <form onSubmit={onSubmit}>
+        <input
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            sendTyping();
+          }}
+        />
+        <button type="submit">Send</button>
+      </form>
+
+      <PresenceList presence={presence} />
+    </div>
+  );
+}
+
+function PresenceList({ presence }: { presence: UseChannelResult<ChatMessage>["presence"] }) {
+  if (presence?.kind === "detailed") {
+    return (
+      <ul>
+        {presence.participants.map((p) => (
+          <li key={p.id}>{p.username ?? p.id}</li>
+        ))}
+      </ul>
+    );
+  }
+
+  if (presence?.kind === "aggregate") {
+    return <p>{presence.count} online</p>;
+  }
+
+  return null;
+}
+```
+
+Mount it wherever your router hands you a room id:
+
+```tsx
+// file: app.tsx
+"use client";
+
+import { Portal } from "@portalsdk/core";
+import { PortalProvider } from "@portalsdk/react";
+import { ChatRoom } from "./chat-room";
+
+const portal = new Portal({ apiKey: "pk_your_publishable_key" });
+
+export function App({ roomId }: { roomId: string }) {
+  return (
+    <PortalProvider client={portal}>
+      <ChatRoom roomId={roomId} />
+    </PortalProvider>
+  );
+}
+```
+
+## History
+
+`history: 30` on `useChannel` backfills the last 30 messages on connect. `hasPrevious`
+starts `true` and flips to `false` once `loadPrevious()` has walked back to the
+beginning of the channel — the "Load older messages" button above disables itself
+naturally once there's nothing left to load.
+
+## Presence
+
+`presence` narrows on `.kind`: small/standard rooms get a full, `"detailed"` roster
+(`participants`, each with `id`, `anon`, and optional `username`/`metadata`); larger
+channels degrade to `"aggregate"` (`count` plus recent join/leave deltas only, no full
+list). Branch on `kind` rather than assuming one shape, as the example above does.
+
+## Membership
+
+Whether a user is allowed into a given room — and who's a member of it — is a
+server-side concern, configured through `portal.config.ts` (`anonymous`, `authz`; see
+[Authoring portal.config.ts](/config-cli/portal-config)). The client SDK doesn't expose
+a "join" or "add member" call; from the client, you can only:
+
+- read the roster with `members()` (a fetched directory, not live state — merge it with
+  `presence` for online/offline), and
+- catch `NotMemberError` if a user without a membership row tries to connect to a
+  membership-gated channel.
+
+```ts
+import { NotMemberError } from "@portalsdk/core";
+import type { ChannelHandle } from "@portalsdk/core";
+
+async function loadRoster(room: ChannelHandle) {
+  try {
+    return await room.members();
+  } catch (err) {
+    if (err instanceof NotMemberError) {
+      return [];
+    }
+    throw err;
+  }
+}
+```
+
+Adding or removing members from a channel happens on your backend, outside this SDK's
+surface.
+
+# API reference
+
+The full HTTP API reference — every route, request/response shape, and error code —
+is generated from Portal's OpenAPI document and lives at
+**API reference → HTTP API** in the nav.
+
+That covers the account/admin-facing REST API: minting tokens, publishing server
+messages, managing channel membership and bans, sending notifications, and deploying
+config. For the client SDK surface (`@portalsdk/core`/`@portalsdk/react`) see
+**Core SDK** and **React**; for the small HTTP surface the client SDK calls directly
+(publish, history, members) see [Wire protocol](/wire-protocol#http-surface). The two
+overlap in places — the client-callable routes appear in both the OpenAPI reference and
+the wire protocol page, described from different angles (HTTP contract vs. protocol
+semantics).
+
+WebSocket endpoints (the channel and inbox sockets, and the dashboard's live-activity
+socket) aren't modeled by OpenAPI — they're documented as prose on the
+[Wire protocol](/wire-protocol) page instead.
+

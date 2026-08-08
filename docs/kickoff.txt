@@ -1,0 +1,82 @@
+Portal × Crafter Station
+07.08.26 · Lima
+The Realtime Hackathon
+
+Construyan algo
+que esté vivo.
+39H
+07 → 09 AGO
+Comenzar
+01 / EL RETO
+IA ESTÁTICA
+Prompt
+Respuesta
+Solo cambia cuando alguien pregunta.
+
+IA REALTIME
+Algo pasa.
+El producto responde.
+Personas
+Agentes
+Datos live
+02 / LA FÓRMULA
+IA
++
+Realtime
+=
+Producto
+Funcional. Desplegado. Demostrable.
+03 / PORTAL
+La vía rápida al realtime.
+PersonasAgentesAppsDatos livePortal
+Presence
+Chat
+Sync
+Signals
+Location
+04 / 39 HORAS
+Viernes 19:00
+Domingo 10:00
+VIE 19:00
+Kickoff
+20:00
+Portal Quick Start
+SÁB 09–21
+Mentorías
+DOM 00:00
+Entregas abiertas
+10:00
+Cierre
+19:00
+Ganadores
+Todos los horarios · UTC−5 · Lima
+05 / LA ENTREGA
+Seis piezas.
+DOM · 10:00
+Equipo + contacto
+1–4 personas
+Pitch
+≤ 280 caracteres
+Producto live
+URL desplegada
+Demo
+≤ 01:30
+GitHub
+Repositorio público
+Uso de Portal
+Explicación concreta
+06 / ELEGIBILIDAD
+Producto funcional
+
+Interacción realtime real
+
+Commits dentro de la ventana
+
+Solo una idea o slides
+
+Prototipo sin desplegar
+
+Repositorio privado
+
+¿Producto existente?
+the-realtime-hackathon

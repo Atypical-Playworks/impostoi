@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+.DS_Store
+coverage/
+supabase/.temp/
+supabase/.branches/
+
+# Sandcastle and local credentials
+.sandcastle/.env
+auth.json
