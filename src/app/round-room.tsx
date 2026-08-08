@@ -170,6 +170,84 @@ function RoundConnection({
   );
 }
 
+function LiveLobby({
+  onLeave,
+  onStart,
+  participantId,
+  roomCode,
+}: {
+  onLeave: () => void;
+  onStart: () => void;
+  participantId: string;
+  roomCode: string;
+}) {
+  return (
+    <main className="round-shell">
+      <header className="round-header">
+        <button type="button" className="back-button" onClick={onLeave}>
+          <ChevronLeft size={18} /> Salir de la sala
+        </button>
+        <div className="round-brand">
+          impostoi <span>ROOM IMPOST</span>
+        </div>
+        <div className="connection-status">
+          <i /> Portal conectado · Esperando jugadores
+        </div>
+      </header>
+      <div className="round-layout">
+        <section className="round-main">
+          <div className="round-heading">
+            <div>
+              <p className="eyebrow">Sala de espera</p>
+              <h1>Tu sala esta lista</h1>
+            </div>
+            <div className="room-code-badge">{roomCode}</div>
+          </div>
+          <div className="round-card lobby-card">
+            <span className="big-round-icon">
+              <Sparkles size={32} />
+            </span>
+            <p className="eyebrow">Eres el anfitrion</p>
+            <h2>Esperando jugadores</h2>
+            <p>Comparte el codigo para que tus amigos se unan.</p>
+            <button type="button" className="round-primary" onClick={onStart}>
+              Comenzar ronda <Target size={19} />
+            </button>
+          </div>
+        </section>
+        <aside className="round-sidebar">
+          <div className="sidebar-heading">
+            <Users size={19} />
+            <strong>Participantes</strong>
+            <span>1/6</span>
+          </div>
+          <div className="participant-list">
+            <div className="participant-card">
+              <span
+                className="round-avatar"
+                style={{ backgroundColor: "#21D4D4" }}
+              >
+                G
+              </span>
+              <div>
+                <strong>Gato Ninja (tu)</strong>
+                <small>
+                  <i className="activity-dot idle" /> Anfitrion
+                </small>
+              </div>
+            </div>
+          </div>
+          <div className="privacy-note">
+            <Shield size={17} />
+            <span>Los roles y votos son privados hasta la revelacion.</span>
+          </div>
+          <span className="sr-only">Participante: {participantId}</span>
+        </aside>
+      </div>
+    </main>
+  );
+}
+
 type LiveMessage = {
   [key: string]: unknown;
 };
@@ -224,13 +302,16 @@ function LiveRoundRoom({
 
   if (!view) {
     return (
-      <RoundConnection
+      <LiveLobby
         onLeave={onLeave}
-        label={
-          status === "blocked"
-            ? "Sala no disponible"
-            : "Esperando el estado de la partida..."
+        onStart={() =>
+          void send({
+            content: liveAction("start_clue_phase"),
+            type: "match_action",
+          })
         }
+        participantId={me?.id ?? "pending"}
+        roomCode={channelId.replace(/^room-/, "")}
       />
     );
   }

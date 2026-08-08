@@ -1151,6 +1151,27 @@ button {
   font-weight: 900;
   box-shadow: 0 4px 0 var(--ink);
 }
+.room-code-badge {
+  padding: 10px 15px;
+  border: 2px solid var(--cyan);
+  border-radius: 12px;
+  background: #2c0b6b;
+  color: var(--cyan);
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  box-shadow: 0 4px 0 var(--ink);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .round-card,
 .word-card,
 .discussion-banner {
