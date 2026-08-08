@@ -18,4 +18,10 @@ export function readPublicRuntimeConfig(
   };
 }
 
-export const publicRuntimeConfig = readPublicRuntimeConfig();
+export const publicRuntimeConfig = readPublicRuntimeConfig({
+  NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  NEXT_PUBLIC_PORTAL_KEY: process.env.NEXT_PUBLIC_PORTAL_KEY,
+});
