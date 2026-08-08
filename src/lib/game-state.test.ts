@@ -119,4 +119,44 @@ describe("server-authoritative game state", () => {
       }),
     ).toThrow("invalid-agent");
   });
+
+  test("rejects malformed authority and participant inputs", () => {
+    expect(() =>
+      createGame({
+        matchId: "match-1",
+        hostId: "unknown",
+        participants,
+        category: "Animales",
+        secretWord: "zorro",
+        agentId: "agent",
+        random: () => 1,
+      }),
+    ).toThrow("invalid-host");
+
+    expect(() =>
+      createGame({
+        matchId: "match-1",
+        hostId: "p1",
+        participants: [
+          ...participants.slice(0, -1),
+          { ...participants[4], alias: "Luna" },
+        ],
+        category: "Animales",
+        secretWord: "zorro",
+        agentId: "agent",
+      }),
+    ).toThrow("duplicate-alias");
+
+    expect(() =>
+      createGame({
+        matchId: "match-1",
+        hostId: "p1",
+        participants,
+        category: "Animales",
+        secretWord: "zorro",
+        agentId: "agent",
+        random: () => 1,
+      }),
+    ).toThrow("invalid-random");
+  });
 });

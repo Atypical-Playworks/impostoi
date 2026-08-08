@@ -13,35 +13,35 @@ export type ParticipantKind = "player" | "agent";
 export type HiddenRole = "civilian" | "impostor";
 
 export type Participant = {
-  id: string;
-  alias: string;
-  avatar: string;
-  kind: ParticipantKind;
+  readonly id: string;
+  readonly alias: string;
+  readonly avatar: string;
+  readonly kind: ParticipantKind;
 };
 
 export type PublicParticipant = Omit<Participant, "kind">;
 
 type PrivateRound = {
-  category: string;
-  secretWord: string;
-  agentId: string;
-  impostorId: string;
-  clues: Map<string, string>;
-  votes: {
-    ai_detection: Map<string, string>;
-    impostor: Map<string, string>;
+  readonly category: string;
+  readonly secretWord: string;
+  readonly agentId: string;
+  readonly impostorId: string;
+  readonly clues: ReadonlyMap<string, string>;
+  readonly votes: {
+    readonly ai_detection: ReadonlyMap<string, string>;
+    readonly impostor: ReadonlyMap<string, string>;
   };
 };
 
 export type GameState = {
-  matchId: string;
-  hostId: string;
-  roundNumber: number;
-  phase: MatchPhase;
-  votingStage?: VotingStage;
-  participants: readonly Participant[];
-  round: PrivateRound;
-  discussion: string;
+  readonly matchId: string;
+  readonly hostId: string;
+  readonly roundNumber: number;
+  readonly phase: MatchPhase;
+  readonly votingStage?: VotingStage;
+  readonly participants: readonly Participant[];
+  readonly round: PrivateRound;
+  readonly discussion: string;
 };
 
 export type PublicGameView = {
@@ -99,7 +99,9 @@ function copyState(state: GameState, changes: Partial<GameState>): GameState {
   return { ...state, ...changes };
 }
 
-function tally(votes: Map<string, string>): Readonly<Record<string, number>> {
+function tally(
+  votes: ReadonlyMap<string, string>,
+): Readonly<Record<string, number>> {
   return Object.fromEntries(
     [...votes.values()].reduce((counts, target) => {
       counts.set(target, (counts.get(target) ?? 0) + 1);
@@ -108,20 +110,23 @@ function tally(votes: Map<string, string>): Readonly<Record<string, number>> {
   );
 }
 
-function allSubmitted(state: GameState, votes: Map<string, string>): boolean {
+function allSubmitted(
+  state: GameState,
+  votes: ReadonlyMap<string, string>,
+): boolean {
   return votes.size === state.participants.length;
 }
 
 export function createGame(input: CreateGameInput): GameState {
   const players = input.participants.filter(({ kind }) => kind === "player");
+  const agents = input.participants.filter(({ kind }) => kind === "agent");
   if (players.length < 4 || players.length > 5) {
     throw new GameStateError("invalid-player-count");
   }
   if (
     input.participants.length !== players.length + 1 ||
-    !input.participants.some(
-      ({ id, kind }) => id === input.agentId && kind === "agent",
-    )
+    agents.length !== 1 ||
+    agents[0]?.id !== input.agentId
   ) {
     throw new GameStateError("invalid-agent");
   }
@@ -131,13 +136,33 @@ export function createGame(input: CreateGameInput): GameState {
   ) {
     throw new GameStateError("duplicate-participant");
   }
+  if (!input.participants.some(({ id }) => id === input.hostId)) {
+    throw new GameStateError("invalid-host");
+  }
+  if (
+    input.participants.some(
+      ({ id, alias, avatar }) => !id.trim() || !alias.trim() || !avatar.trim(),
+    )
+  ) {
+    throw new GameStateError("invalid-participant");
+  }
+  if (
+    new Set(input.participants.map(({ alias }) => alias)).size !==
+    input.participants.length
+  ) {
+    throw new GameStateError("duplicate-alias");
+  }
   if (!input.category.trim() || !input.secretWord.trim()) {
     throw new GameStateError("invalid-round-data");
   }
 
   const random = input.random ?? Math.random;
+  const randomValue = random();
+  if (!Number.isFinite(randomValue) || randomValue < 0 || randomValue >= 1) {
+    throw new GameStateError("invalid-random");
+  }
   const impostor =
-    input.participants[Math.floor(random() * input.participants.length)];
+    input.participants[Math.floor(randomValue * input.participants.length)];
   if (!impostor) throw new GameStateError("invalid-random");
 
   return {
