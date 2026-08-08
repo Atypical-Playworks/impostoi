@@ -6,7 +6,8 @@
       "!**/.next",
       "!**/node_modules",
       "!**/supabase/.branches",
-      "!**/supabase/.temp"
+      "!**/supabase/.temp",
+      "!**/gha-creds-*.json"
     ]
   },
   "formatter": {

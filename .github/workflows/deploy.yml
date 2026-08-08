@@ -124,3 +124,7 @@ jobs:
             --region "$REGION" \
             --project "$PROJECT_ID" \
             --format='value(status.url)'
+
+      - name: Remove temporary Google credentials
+        if: ${{ always() }}
+        run: rm -f gha-creds-*.json
