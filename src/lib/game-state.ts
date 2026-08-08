@@ -52,6 +52,7 @@ export type PublicGameView = {
   matchId: string;
   roundNumber: number;
   phase: MatchPhase;
+  phaseDeadlineAt?: number;
   votingStage?: VotingStage;
   participants: readonly PublicParticipant[];
   category: string;
@@ -379,6 +380,9 @@ export function publicViewFor(state: GameState): PublicGameView {
     matchId: state.matchId,
     roundNumber: state.roundNumber,
     phase: state.phase,
+    ...(state.phaseDeadlineAt !== undefined
+      ? { phaseDeadlineAt: state.phaseDeadlineAt }
+      : {}),
     ...(state.votingStage ? { votingStage: state.votingStage } : {}),
     participants,
     category: state.round.category,

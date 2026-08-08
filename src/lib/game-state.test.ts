@@ -182,6 +182,9 @@ describe("server-authoritative game state", () => {
     );
     expect(discussion.phase).toBe("discussion");
     expect(discussion.phaseDeadlineAt).toBeDefined();
+    expect(publicViewFor(discussion).phaseDeadlineAt).toBe(
+      discussion.phaseDeadlineAt,
+    );
 
     const voting = advanceTimedOutPhase(
       discussion,
