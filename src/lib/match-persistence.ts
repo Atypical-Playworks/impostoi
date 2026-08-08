@@ -1,7 +1,5 @@
 import "server-only";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 export type CompletedMatchPayload = {
   readonly match: {
     readonly id: string;
@@ -51,7 +49,16 @@ export type MatchPersistence = {
   loadMatch(matchId: string): Promise<Record<string, unknown> | null>;
 };
 
-type PersistenceClient = Pick<SupabaseClient, "rpc">;
+type PersistenceClient = {
+  rpc(
+    name: string,
+    args: Record<string, unknown>,
+  ): PromiseLike<{ data: unknown; error: { message: string } | null }>;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 export function createMatchPersistence(
   client: PersistenceClient,
@@ -72,7 +79,10 @@ export function createMatchPersistence(
         requested_match_id: matchId,
       });
       if (error) throw new Error(`Unable to load match: ${error.message}`);
-      return (data as Record<string, unknown> | null) ?? null;
+      if (data === null) return null;
+      if (!isRecord(data))
+        throw new Error("Persistence returned invalid match");
+      return data;
     },
   };
 }

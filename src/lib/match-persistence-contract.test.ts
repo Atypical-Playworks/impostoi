@@ -1,6 +1,10 @@
-import { expect, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+
+mock.module("server-only", () => ({}));
+
+const { createMatchPersistence } = await import("./match-persistence");
 
 const migration = readFileSync(
   join(
@@ -52,5 +56,49 @@ test("match persistence protects private history with participant-scoped RLS", (
   );
   expect(migration).toContain(
     "grant execute on function public.migrate_guest_progress(uuid, uuid)",
+  );
+});
+
+test("match persistence validates RPC results and forwards payloads", async () => {
+  const calls: { name: string; args: Record<string, unknown> }[] = [];
+  const rpc = async (name: string, args: Record<string, unknown>) => {
+    calls.push({ name, args });
+    if (name === "persist_completed_match")
+      return { data: "match-1", error: null };
+    return { data: { match: { id: "match-1" } }, error: null };
+  };
+  const persistence = createMatchPersistence({ rpc });
+  const payload = { match: { id: "match-1" } } as Parameters<
+    typeof persistence.persistCompletedMatch
+  >[0];
+
+  await expect(persistence.persistCompletedMatch(payload)).resolves.toBe(
+    "match-1",
+  );
+  await expect(persistence.loadMatch("match-1")).resolves.toEqual({
+    match: { id: "match-1" },
+  });
+  expect(calls).toEqual([
+    { name: "persist_completed_match", args: { match_payload: payload } },
+    { name: "load_match", args: { requested_match_id: "match-1" } },
+  ]);
+});
+
+test("match persistence rejects RPC errors and malformed results", async () => {
+  const rpc = async (name: string) => {
+    if (name === "persist_completed_match") {
+      return { data: null, error: { message: "database unavailable" } };
+    }
+    return { data: [], error: null };
+  };
+  const persistence = createMatchPersistence({ rpc });
+
+  await expect(
+    persistence.persistCompletedMatch(
+      {} as Parameters<typeof persistence.persistCompletedMatch>[0],
+    ),
+  ).rejects.toThrow("database unavailable");
+  await expect(persistence.loadMatch("match-1")).rejects.toThrow(
+    "invalid match",
   );
 });
