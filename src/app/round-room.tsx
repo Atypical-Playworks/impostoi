@@ -41,7 +41,7 @@ const participants: RoundParticipant[] = [
   { id: "p2", alias: "Luna Pixel", avatar: "#F43FA7", activity: "clue" },
   { id: "p3", alias: "Sol Rebelde", avatar: "#FFD43B", activity: "idle" },
   { id: "p4", alias: "Rio Turbo", avatar: "#7C3AED", activity: "idle" },
-  { id: "agent", alias: "Nube", avatar: "#10B981", activity: "clue" },
+  { id: "p5", alias: "Nube", avatar: "#10B981", activity: "clue" },
 ];
 
 const starterClues = [
@@ -92,7 +92,7 @@ export function RoundRoom({ onLeave }: { onLeave: () => void }) {
           impostoi <span>ROOM IMPOST</span>
         </div>
         <div className="connection-status">
-          <i /> Portal conectado
+          <i /> Vista de demostracion
         </div>
       </header>
 
@@ -224,8 +224,8 @@ function CluePhase({
         <span>Categoria</span>
         <strong>Animales</strong>
         <div className="secret-word">
-          <span>Tu palabra secreta</span>
-          <b>zorro</b>
+          <span>Palabra privada</span>
+          <b>No disponible en la demo</b>
         </div>
       </div>
       <div className="round-card clue-card">
@@ -417,18 +417,16 @@ function Reveal({ onResults }: { onResults: () => void }) {
         <Target size={32} />
       </span>
       <p className="eyebrow">Votacion cerrada</p>
-      <h2>La IA era Nube</h2>
-      <p>
-        Y el impostor de esta ronda era <strong>Rio Turbo</strong>.
-      </p>
+      <h2>Roles revelados</h2>
+      <p>La sala ya puede mostrar el resultado de la ronda.</p>
       <div className="reveal-roles">
         <span>
           <b>IA</b>
-          <small>Nube</small>
+          <small>Resultado privado</small>
         </span>
         <span>
           <b>IMPOSTOR</b>
-          <small>Rio Turbo</small>
+          <small>Resultado privado</small>
         </span>
       </div>
       <button type="button" className="round-primary" onClick={onResults}>
