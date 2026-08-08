@@ -71,11 +71,15 @@ test("Agent statistics expose direct competitive metrics and progress counters",
   expect(statisticsMigration).toContain(
     "create table public.agent_match_statistics",
   );
-  expect(statisticsMigration).toContain("create or replace view public.agent_rankings");
+  expect(statisticsMigration).toContain(
+    "create or replace view public.agent_rankings",
+  );
   expect(statisticsMigration).toContain("camouflage_inconclusive");
   expect(statisticsMigration).toContain("impostor_inconclusive");
   expect(statisticsMigration).toContain("fallback_match");
-  expect(statisticsMigration).toContain("grant select on public.agent_rankings");
+  expect(statisticsMigration).toContain(
+    "grant select on public.agent_rankings",
+  );
   expect(statisticsMigration).toContain("player_progress");
   expect(statisticsMigration).not.toContain(
     'create policy "Anyone can read competitive Agent statistics"',
