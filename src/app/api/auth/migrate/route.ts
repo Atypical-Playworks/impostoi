@@ -10,7 +10,7 @@ import {
 } from "@/lib/supabase/server";
 
 const migrationSchema = z.object({
-  guestUserId: z.string().trim().min(1),
+  guestUserId: z.uuid(),
 });
 
 export async function POST(request: Request) {

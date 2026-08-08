@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
+import { isGuestUser } from "@/lib/auth-policy";
 import { publicRuntimeConfig } from "@/lib/public-env";
 
 export async function middleware(request: NextRequest) {
@@ -26,7 +27,19 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getUser();
+  const { data } = await supabase.auth.getUser();
+  if (data.user && isGuestUser(data.user)) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (accessToken) {
+      response.cookies.set("impostoi_guest_access_token", accessToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+      });
+    }
+  }
   return response;
 }
 

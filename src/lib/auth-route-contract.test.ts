@@ -27,9 +27,21 @@ test("persistent login exchanges an OTP callback for a server session", () => {
 test("migration verifies both identities before invoking the privileged RPC", () => {
   const route = readRoute("src/app/api/auth/migrate/route.ts");
 
+  expect(route).toContain("guestUserId: z.uuid()");
   expect(route).toContain("status: 401");
   expect(route).toContain('"impostoi_guest_access_token"');
   expect(route).toContain("isGuestUser(source.data.user)");
   expect(route).toContain('admin.rpc("migrate_guest_progress"');
   expect(route).toContain("response.cookies.delete");
+});
+
+test("middleware refreshes the server-only Guest token with Supabase sessions", () => {
+  const middleware = readRoute("src/middleware.ts");
+
+  expect(middleware).toContain("isGuestUser(data.user)");
+  expect(middleware).toContain("sessionData.session?.access_token");
+  expect(middleware).toContain(
+    'response.cookies.set("impostoi_guest_access_token"',
+  );
+  expect(middleware).toContain("httpOnly: true");
 });
