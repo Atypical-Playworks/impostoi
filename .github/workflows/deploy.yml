@@ -15,12 +15,37 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        env:
+          WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOYER_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+          DATABASE_URL_PROD: ${{ secrets.DATABASE_URL_PROD }}
+          APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          PORTAL_KEY: ${{ secrets.NEXT_PUBLIC_PORTAL_KEY }}
+        run: |
+          for required in \
+            WORKLOAD_IDENTITY_PROVIDER \
+            DEPLOYER_SERVICE_ACCOUNT \
+            DATABASE_URL_PROD \
+            APP_URL \
+            SUPABASE_URL \
+            SUPABASE_PUBLISHABLE_KEY \
+            PORTAL_KEY; do
+            test -n "${!required}" || { echo "Missing deployment configuration: $required"; exit 1; }
+          done
 
       - uses: google-github-actions/auth@v2
         with:
@@ -75,6 +100,10 @@ jobs:
       - name: Deploy Cloud Run service
         env:
           IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          PORTAL_KEY: ${{ secrets.NEXT_PUBLIC_PORTAL_KEY }}
         run: |
           gcloud run deploy "$SERVICE_NAME" \
             --image "$IMAGE" \
@@ -86,7 +115,7 @@ jobs:
             --cpu 1 \
             --min-instances 0 \
             --max-instances 3 \
-            --set-env-vars "NODE_ENV=production,NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }},NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }},NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }},NEXT_PUBLIC_PORTAL_KEY=${{ secrets.NEXT_PUBLIC_PORTAL_KEY }},OPENCODE_ZEN_BASE_URL=https://opencode.ai/zen/v1,OPENCODE_MODEL=mimo-v2.5-free" \
+            --set-env-vars "NODE_ENV=production,NEXT_PUBLIC_APP_URL=$APP_URL,NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY,NEXT_PUBLIC_PORTAL_KEY=$PORTAL_KEY,OPENCODE_ZEN_BASE_URL=https://opencode.ai/zen/v1,OPENCODE_MODEL=mimo-v2.5-free" \
             --set-secrets "SUPABASE_SECRET_KEY=impostoi-supabase-secret-key:latest,PORTAL_SECRET=impostoi-portal-secret:latest,OPENCODE_ZEN_API_KEY=impostoi-opencode-zen-key:latest"
 
       - name: Show deployment URL
