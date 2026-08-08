@@ -45,8 +45,6 @@ const hooks = {
   },
 };
 
-const copyToWorktree = ["node_modules"];
-
 const listed = await exec("gh", [
   "issue",
   "list",
@@ -141,7 +139,6 @@ const settled = await Promise.allSettled(
       branch: issue.branch,
       sandbox: sandboxProvider(),
       hooks,
-      copyToWorktree,
     });
 
     try {
