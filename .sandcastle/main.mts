@@ -177,13 +177,43 @@ const settled = await Promise.allSettled(
   }),
 );
 
+const completed = settled.flatMap((outcome) =>
+  outcome.status === "fulfilled" && outcome.value.commits.length > 0
+    ? [outcome.value.issue]
+    : [],
+);
+
 for (const outcome of settled) {
   if (outcome.status === "rejected") {
     console.error("Pipeline failed:", outcome.reason);
-    continue;
   }
+}
 
-  const { issue } = outcome.value;
-  await exec("git", ["push", "--set-upstream", "origin", issue.branch]);
-  console.log(`#${issue.id} branch pushed for human review.`);
+if (completed.length > 0) {
+  await sandcastle.run({
+    hooks,
+    sandbox: sandboxProvider(),
+    name: "merge-completed-issues",
+    maxIterations: 1,
+    agent: agent(),
+    promptFile: "./.sandcastle/merge-prompt.md",
+    promptArgs: {
+      BRANCHES: completed.map((issue) => `- ${issue.branch}`).join("\n"),
+      ISSUES: completed
+        .map((issue) => `- ${issue.id}: ${issue.title}`)
+        .join("\n"),
+    },
+  });
+
+  for (const issue of completed) {
+    await exec("gh", [
+      "issue",
+      "close",
+      issue.id,
+      "--repo",
+      "Atypical-Playworks/impostoi",
+      "--comment",
+      "Implemented, reviewed, and merged by Sandcastle.",
+    ]);
+  }
 }
