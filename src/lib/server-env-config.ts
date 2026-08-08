@@ -1,3 +1,5 @@
+import "server-only";
+
 import type { RuntimeEnv } from "./public-env";
 
 export type ServerRuntimeConfig = {

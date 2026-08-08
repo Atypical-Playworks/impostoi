@@ -1,10 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 
-import {
-  type AgentRequest,
-  createAgentAdapter,
-  type GenerateStructuredObject,
+mock.module("server-only", () => ({}));
+
+import type {
+  AgentRequest,
+  GenerateStructuredObject,
 } from "@/lib/agent-adapter-config";
+
+const { createAgentAdapter } = await import("@/lib/agent-adapter-config");
 
 const request: AgentRequest = {
   action: "clue",

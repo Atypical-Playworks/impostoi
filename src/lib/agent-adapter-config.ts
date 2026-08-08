@@ -1,3 +1,5 @@
+import "server-only";
+
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateObject } from "ai";
 import { z } from "zod";

@@ -1,7 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
+
+mock.module("server-only", () => ({}));
 
 import { type RuntimeEnv, readPublicRuntimeConfig } from "@/lib/public-env";
-import { readServerRuntimeConfig } from "@/lib/server-env-config";
+
+const { readServerRuntimeConfig } = await import("@/lib/server-env-config");
 
 describe("runtime environment boundaries", () => {
   test("the public config only exposes public runtime values", () => {
