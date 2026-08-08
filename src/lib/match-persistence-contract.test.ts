@@ -77,6 +77,15 @@ test("Agent statistics expose direct competitive metrics and progress counters",
   expect(statisticsMigration).toContain("fallback_match");
   expect(statisticsMigration).toContain("grant select on public.agent_rankings");
   expect(statisticsMigration).toContain("player_progress");
+  expect(statisticsMigration).not.toContain(
+    'create policy "Anyone can read competitive Agent statistics"',
+  );
+  expect(statisticsMigration).toContain(
+    "ai_detection_attempts = player_progress.ai_detection_attempts + excluded.ai_detection_attempts",
+  );
+  expect(statisticsMigration).toContain(
+    "impostor_successes = player_progress.impostor_successes + excluded.impostor_successes",
+  );
 });
 
 test("match persistence validates RPC results and forwards payloads", async () => {
