@@ -77,6 +77,7 @@ export function canReconnect(
 
 export function createRoomSnapshot(input: RoomSnapshot): RoomSnapshot {
   if (
+    !validateRoomId(input.roomId) ||
     !input.channelId.startsWith("room-") ||
     input.roomId !== input.channelId.slice("room-".length)
   ) {

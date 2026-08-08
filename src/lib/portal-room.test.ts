@@ -73,6 +73,16 @@ describe("Portal room lifecycle", () => {
         receivedAt: 10,
       }),
     ).toThrow("channel mismatch");
+    expect(() =>
+      createRoomSnapshot({
+        roomId: "",
+        channelId: "room-",
+        status: "ready",
+        phase: "lobby",
+        participants: [],
+        receivedAt: 10,
+      }),
+    ).toThrow("channel mismatch");
   });
 
   test("joins and leaves participants using safe presence metadata", () => {
