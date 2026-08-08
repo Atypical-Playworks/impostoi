@@ -5,6 +5,7 @@ import type { RuntimeEnv } from "./public-env";
 export type ServerRuntimeConfig = {
   supabaseSecretKey: string;
   portalSecret: string;
+  portalApiUrl: string;
   opencodeZenApiKey: string;
   opencodeZenBaseUrl: string;
   opencodeModel: string;
@@ -24,6 +25,7 @@ export function readServerRuntimeConfig(
   return {
     supabaseSecretKey: required(env, "SUPABASE_SECRET_KEY"),
     portalSecret: required(env, "PORTAL_SECRET"),
+    portalApiUrl: env.PORTAL_API_URL ?? "https://api.useportal.co",
     opencodeZenApiKey: required(env, "OPENCODE_ZEN_API_KEY"),
     opencodeZenBaseUrl:
       env.OPENCODE_ZEN_BASE_URL ?? "https://opencode.ai/zen/v1",
