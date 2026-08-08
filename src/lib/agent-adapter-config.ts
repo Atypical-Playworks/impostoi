@@ -46,6 +46,7 @@ type StructuredObjectArgs = {
   schema: z.ZodType;
   system: string;
   prompt: string;
+  abortSignal?: AbortSignal;
 };
 
 export type GenerateStructuredObject = (
@@ -131,6 +132,7 @@ export function createAgentAdapter(
       schema: args.schema,
       system: args.system,
       prompt: args.prompt,
+      abortSignal: args.abortSignal,
     });
     return { object: result.object };
   },
@@ -146,22 +148,28 @@ export function createAgentAdapter(
     async act(request: AgentRequest): Promise<AgentResult> {
       const startedAt = Date.now();
       const model = provider(request.model.id);
-      const operation = generate({
-        model,
-        schema: schemaFor(request.action),
-        system: `Act as a cautious-imitator Agent in impostoi. Respond only with the requested structured output. Your role is ${request.role}.`,
-        prompt: promptFor(request),
-      }).then(({ object }) => parseOutput(request.action, object));
+      const controller = new AbortController();
+      const operation = Promise.resolve()
+        .then(() =>
+          generate({
+            model,
+            schema: schemaFor(request.action),
+            system: `Act as a ${request.strategy} Agent in impostoi. Respond only with the requested structured output. Your role is ${request.role}.`,
+            prompt: promptFor(request),
+            abortSignal: controller.signal,
+          }),
+        )
+        .then(({ object }) => parseOutput(request.action, object));
       let timer: ReturnType<typeof setTimeout> | undefined;
 
       try {
         const output = await Promise.race([
           operation,
           new Promise<never>((_, reject) => {
-            timer = setTimeout(
-              () => reject(new Error("agent-timeout")),
-              timeoutMs,
-            );
+            timer = setTimeout(() => {
+              controller.abort();
+              reject(new Error("agent-timeout"));
+            }, timeoutMs);
           }),
         ]);
         return {

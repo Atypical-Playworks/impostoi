@@ -24,8 +24,10 @@ const request: AgentRequest = {
 describe("OpenCode Zen Agent adapter", () => {
   test("returns structured output and keeps role context in the provider prompt", async () => {
     let providerPrompt = "";
-    const generate: GenerateStructuredObject = async ({ prompt }) => {
+    let systemPrompt = "";
+    const generate: GenerateStructuredObject = async ({ prompt, system }) => {
       providerPrompt = prompt;
+      systemPrompt = system;
       return { object: { text: "Tiene hábitos nocturnos" } };
     };
 
@@ -44,11 +46,17 @@ describe("OpenCode Zen Agent adapter", () => {
     });
     expect(providerPrompt).toContain('"role":"civilian"');
     expect(providerPrompt).toContain('"secretWord":"zorro"');
+    expect(systemPrompt).toContain("cautious-imitator");
   });
 
   test("uses a deterministic fallback when the provider times out", async () => {
-    const neverCompletes: GenerateStructuredObject = () =>
-      new Promise(() => {});
+    let wasAborted = false;
+    const neverCompletes: GenerateStructuredObject = ({ abortSignal }) => {
+      abortSignal?.addEventListener("abort", () => {
+        wasAborted = true;
+      });
+      return new Promise(() => {});
+    };
     const adapter = createAgentAdapter(
       {
         apiKey: "secret-key",
@@ -62,6 +70,7 @@ describe("OpenCode Zen Agent adapter", () => {
 
     expect(result.metadata.fallback).toBe(true);
     expect(result.metadata.responseTimeMs).toBeGreaterThanOrEqual(0);
+    expect(wasAborted).toBe(true);
     expect(result.output).toEqual({
       text: "Mantendré mi pista relacionada con la categoría.",
     });
@@ -100,5 +109,24 @@ describe("OpenCode Zen Agent adapter", () => {
     expect(result.output).toEqual({
       text: "Mantendré mi pista relacionada con la categoría.",
     });
+  });
+
+  test("supports every structured agent action", async () => {
+    const outputs = {
+      clue: { text: "Una pista" },
+      discussion: { text: "Una respuesta" },
+      vote: { alias: "Luna" },
+      summary: { summary: "Resumen del encuentro" },
+    } as const;
+
+    for (const action of Object.keys(outputs) as AgentRequest["action"][]) {
+      const result = await createAgentAdapter(
+        { apiKey: "secret-key", baseUrl: "https://opencode.example/v1" },
+        async () => ({ object: outputs[action] }),
+      ).act({ ...request, action });
+
+      expect(result.output).toEqual(outputs[action]);
+      expect(result.metadata.fallback).toBe(false);
+    }
   });
 });
