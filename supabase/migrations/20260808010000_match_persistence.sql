@@ -270,7 +270,7 @@ begin
     end loop;
 
     for event_row in select * from jsonb_array_elements(round_row -> 'agent_events') loop
-      insert into public.agent_events
+      insert into public.agent_events (id, round_id, event_type, payload, duration_ms, created_at)
       select gen_random_uuid(), saved_round_id, event_type, payload, duration_ms, coalesce(created_at, now())
       from jsonb_to_record(event_row) as x(
         event_type text, payload jsonb, duration_ms integer, created_at timestamptz

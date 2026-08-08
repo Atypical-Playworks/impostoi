@@ -113,6 +113,12 @@ test("replay records expose fallback state without private Agent context", () =>
   expect(resilienceMigration).not.toContain("impostor_participant_id");
 });
 
+test("fallback migration keeps match persistence compatible with agent event columns", () => {
+  expect(migration).toContain(
+    "insert into public.agent_events (id, round_id, event_type, payload, duration_ms, created_at)",
+  );
+});
+
 test("match persistence validates RPC results and forwards payloads", async () => {
   const calls: { name: string; args: Record<string, unknown> }[] = [];
   const rpc = async (name: string, args: Record<string, unknown>) => {
