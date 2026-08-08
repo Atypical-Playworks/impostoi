@@ -20,7 +20,7 @@ RUN groupmod -o -g $AGENT_GID node \
   && usermod -o -u $AGENT_UID -g $AGENT_GID -d /home/agent -m -l agent node \
   && mkdir -p /home/agent/.local/state /home/agent/.local/share/opencode \
   && chown -R $AGENT_UID:$AGENT_GID /home/agent \
-  && npm install -g opencode-ai@latest
+  && npm install -g bun@1.3.14 opencode-ai@latest
 
 USER ${AGENT_UID}:${AGENT_GID}
 WORKDIR /home/agent
