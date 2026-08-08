@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  advanceTimedOutPhase,
   createGame,
   publicViewFor,
   showResults,
@@ -169,5 +170,38 @@ describe("server-authoritative game state", () => {
         random: () => 1,
       }),
     ).toThrow("invalid-random");
+  });
+
+  test("advances timed-out phases so a disconnected participant cannot block", () => {
+    let state = readyGame();
+    expect(state.phaseDeadlineAt).toBeDefined();
+
+    const discussion = advanceTimedOutPhase(
+      state,
+      state.phaseDeadlineAt as number,
+    );
+    expect(discussion.phase).toBe("discussion");
+    expect(discussion.phaseDeadlineAt).toBeDefined();
+
+    const voting = advanceTimedOutPhase(
+      discussion,
+      discussion.phaseDeadlineAt as number,
+    );
+    expect(voting.phase).toBe("voting");
+    expect(voting.votingStage).toBe("ai_detection");
+
+    const impostorVoting = advanceTimedOutPhase(
+      voting,
+      voting.phaseDeadlineAt as number,
+    );
+    expect(impostorVoting.phase).toBe("voting");
+    expect(impostorVoting.votingStage).toBe("impostor");
+
+    const reveal = advanceTimedOutPhase(
+      impostorVoting,
+      impostorVoting.phaseDeadlineAt as number,
+    );
+    expect(reveal.phase).toBe("reveal");
+    expect(reveal.phaseDeadlineAt).toBeUndefined();
   });
 });

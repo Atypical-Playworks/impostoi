@@ -20,6 +20,13 @@ const statisticsMigration = readFileSync(
   ),
   "utf8",
 );
+const resilienceMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260808030000_resilience_privacy.sql",
+  ),
+  "utf8",
+);
 
 test("match persistence migration stores complete match history", () => {
   for (const table of [
@@ -95,6 +102,15 @@ test("Agent statistics expose direct competitive metrics and progress counters",
   expect(statisticsMigration).toContain(
     "impostor_successes = player_progress.impostor_successes + excluded.impostor_successes",
   );
+});
+
+test("replay records expose fallback state without private Agent context", () => {
+  expect(resilienceMigration).toContain(
+    "add column fallback boolean not null default false",
+  );
+  expect(resilienceMigration).toContain("event_type = 'agent_action'");
+  expect(resilienceMigration).not.toContain("secret_word");
+  expect(resilienceMigration).not.toContain("impostor_participant_id");
 });
 
 test("match persistence validates RPC results and forwards payloads", async () => {
