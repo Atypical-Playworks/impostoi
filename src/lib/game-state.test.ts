@@ -123,6 +123,17 @@ describe("server-authoritative game state", () => {
   test("rejects malformed authority and participant inputs", () => {
     expect(() =>
       createGame({
+        matchId: "   ",
+        hostId: "p1",
+        participants,
+        category: "Animales",
+        secretWord: "zorro",
+        agentId: "agent",
+      }),
+    ).toThrow("invalid-match");
+
+    expect(() =>
+      createGame({
         matchId: "match-1",
         hostId: "unknown",
         participants,
