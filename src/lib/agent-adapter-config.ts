@@ -42,7 +42,7 @@ export type AgentResult = {
 };
 
 type StructuredObjectArgs = {
-  model: unknown;
+  model: Parameters<typeof generateObject>[0]["model"];
   schema: z.ZodType;
   system: string;
   prompt: string;
@@ -73,6 +73,19 @@ function schemaFor(action: AgentAction): z.ZodType {
       return voteSchema;
     case "summary":
       return summarySchema;
+  }
+}
+
+function parseOutput(action: AgentAction, object: unknown): AgentOutput {
+  switch (action) {
+    case "clue":
+      return clueSchema.parse(object);
+    case "discussion":
+      return discussionSchema.parse(object);
+    case "vote":
+      return voteSchema.parse(object);
+    case "summary":
+      return summarySchema.parse(object);
   }
 }
 
@@ -114,7 +127,7 @@ export function createAgentAdapter(
   config: AgentAdapterConfig,
   generate: GenerateStructuredObject = async (args) => {
     const result = await generateObject({
-      model: args.model as Parameters<typeof generateObject>[0]["model"],
+      model: args.model,
       schema: args.schema,
       system: args.system,
       prompt: args.prompt,
@@ -138,7 +151,7 @@ export function createAgentAdapter(
         schema: schemaFor(request.action),
         system: `Act as a cautious-imitator Agent in impostoi. Respond only with the requested structured output. Your role is ${request.role}.`,
         prompt: promptFor(request),
-      }).then(({ object }) => schemaFor(request.action).parse(object));
+      }).then(({ object }) => parseOutput(request.action, object));
       let timer: ReturnType<typeof setTimeout> | undefined;
 
       try {
@@ -153,7 +166,7 @@ export function createAgentAdapter(
         ]);
         return {
           action: request.action,
-          output: output as AgentOutput,
+          output,
           metadata: { fallback: false, responseTimeMs: Date.now() - startedAt },
         };
       } catch {

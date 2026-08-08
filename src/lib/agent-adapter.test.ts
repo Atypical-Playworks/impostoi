@@ -85,4 +85,20 @@ describe("OpenCode Zen Agent adapter", () => {
     expect(providerPrompt).toContain('"role":"impostor"');
     expect(providerPrompt).not.toContain("zorro");
   });
+
+  test("uses the fallback when the provider returns an invalid shape", async () => {
+    const invalidOutput: GenerateStructuredObject = async () => ({
+      object: { text: "" },
+    });
+
+    const result = await createAgentAdapter(
+      { apiKey: "secret-key", baseUrl: "https://opencode.example/v1" },
+      invalidOutput,
+    ).act(request);
+
+    expect(result.metadata.fallback).toBe(true);
+    expect(result.output).toEqual({
+      text: "Mantendré mi pista relacionada con la categoría.",
+    });
+  });
 });
