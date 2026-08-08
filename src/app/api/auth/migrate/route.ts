@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -10,7 +11,6 @@ import {
 
 const migrationSchema = z.object({
   guestUserId: z.string().trim().min(1),
-  guestAccessToken: z.string().min(1),
 });
 
 export async function POST(request: Request) {
@@ -34,7 +34,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const { guestUserId, guestAccessToken } = parsed.data;
+  const { guestUserId } = parsed.data;
+  const guestAccessToken = (await cookies()).get(
+    "impostoi_guest_access_token",
+  )?.value;
+  if (!guestAccessToken) {
+    return NextResponse.json(
+      { error: "Guest session verification failed" },
+      { status: 403 },
+    );
+  }
 
   const source = await supabase.auth.getUser(guestAccessToken);
   if (
@@ -70,7 +79,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Guest migration failed" }, { status });
   }
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     migratedMatches: data?.[0]?.migrated_matches ?? 0,
   });
+  response.cookies.delete("impostoi_guest_access_token");
+  return response;
 }

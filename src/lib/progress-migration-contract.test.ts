@@ -15,3 +15,12 @@ test("guest progress migration removes the legacy RPC overload", () => {
     "revoke all on function public.migrate_guest_progress(uuid, uuid) from public, anon, authenticated;",
   );
 });
+
+test("guest access tokens are not returned by the guest endpoint", () => {
+  const guestRoute = readFileSync(
+    join(process.cwd(), "src/app/api/auth/guest/route.ts"),
+    "utf8",
+  );
+  expect(guestRoute).not.toContain("accessToken:");
+  expect(guestRoute).toContain("httpOnly: true");
+});

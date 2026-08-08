@@ -9,21 +9,41 @@ export async function POST() {
 
   if (current.data.user) {
     const session = await supabase.auth.getSession();
-    return NextResponse.json({
-      user: current.data.user,
-      accessToken: isGuestUser(current.data.user)
-        ? session.data.session?.access_token
-        : undefined,
-    });
+    const response = NextResponse.json({ user: current.data.user });
+    const accessToken = isGuestUser(current.data.user)
+      ? session.data.session?.access_token
+      : undefined;
+    if (accessToken) {
+      response.cookies.set("impostoi_guest_access_token", accessToken, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+      });
+    }
+    return response;
   }
 
   const { data, error } = await supabase.auth.signInAnonymously();
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 502 });
+    return NextResponse.json(
+      { error: "Unable to start Guest session" },
+      { status: 502 },
+    );
   }
 
-  return NextResponse.json(
-    { user: data.user, accessToken: data.session?.access_token },
-    { status: 201 },
-  );
+  const response = NextResponse.json({ user: data.user }, { status: 201 });
+  if (data.session?.access_token) {
+    response.cookies.set(
+      "impostoi_guest_access_token",
+      data.session.access_token,
+      {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+      },
+    );
+  }
+  return response;
 }
