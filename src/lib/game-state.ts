@@ -118,6 +118,9 @@ function allSubmitted(
 }
 
 export function createGame(input: CreateGameInput): GameState {
+  if (!input.matchId.trim()) {
+    throw new GameStateError("invalid-match");
+  }
   const players = input.participants.filter(({ kind }) => kind === "player");
   const agents = input.participants.filter(({ kind }) => kind === "agent");
   if (players.length < 4 || players.length > 5) {
