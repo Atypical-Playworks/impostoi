@@ -77,6 +77,7 @@ export function canReconnect(
 
 export function createRoomSnapshot(input: RoomSnapshot): RoomSnapshot {
   if (
+    !validateRoomId(input.roomId) ||
     !input.channelId.startsWith("room-") ||
     input.roomId !== input.channelId.slice("room-".length)
   ) {
@@ -89,6 +90,49 @@ export function createRoomSnapshot(input: RoomSnapshot): RoomSnapshot {
       safePresence(participant.id, participant),
     ),
   };
+}
+
+export function joinRoom(
+  snapshot: RoomSnapshot,
+  participant: { id: string } & Partial<PresenceMetadata>,
+): RoomSnapshot {
+  const normalizedSnapshot = createRoomSnapshot(snapshot);
+  const normalizedParticipant = safePresence(participant.id, participant);
+
+  return {
+    ...normalizedSnapshot,
+    participants: [
+      ...normalizedSnapshot.participants.filter(
+        ({ id }) => id !== normalizedParticipant.id,
+      ),
+      normalizedParticipant,
+    ],
+  };
+}
+
+export function leaveRoom(
+  snapshot: RoomSnapshot,
+  participantId: string,
+): RoomSnapshot {
+  const normalizedSnapshot = createRoomSnapshot(snapshot);
+
+  return {
+    ...normalizedSnapshot,
+    participants: normalizedSnapshot.participants.filter(
+      ({ id }) => id !== participantId,
+    ),
+  };
+}
+
+export function reconnectRoom(
+  snapshot: RoomSnapshot,
+  participant: { id: string } & Partial<PresenceMetadata>,
+  disconnectedAt: number,
+  now = Date.now(),
+): RoomSnapshot | null {
+  return canReconnect(disconnectedAt, now)
+    ? joinRoom(snapshot, participant)
+    : null;
 }
 
 export function mapPortalError(code: string): RoomErrorState {
