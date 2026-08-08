@@ -173,12 +173,12 @@ function RoundConnection({
 function LiveLobby({
   onLeave,
   onStart,
-  participantId,
+  participants,
   roomCode,
 }: {
   onLeave: () => void;
   onStart: () => void;
-  participantId: string;
+  participants: RoundParticipant[];
   roomCode: string;
 }) {
   return (
@@ -219,29 +219,34 @@ function LiveLobby({
           <div className="sidebar-heading">
             <Users size={19} />
             <strong>Participantes</strong>
-            <span>1/6</span>
+            <span>{participants.length}/6</span>
           </div>
           <div className="participant-list">
-            <div className="participant-card">
-              <span
-                className="round-avatar"
-                style={{ backgroundColor: "#21D4D4" }}
-              >
-                G
-              </span>
-              <div>
-                <strong>Gato Ninja (tu)</strong>
-                <small>
-                  <i className="activity-dot idle" /> Anfitrion
-                </small>
+            {participants.map((participant) => (
+              <div className="participant-card" key={participant.id}>
+                <span
+                  className="round-avatar"
+                  style={{ backgroundColor: participant.avatar }}
+                >
+                  {participant.alias[0]}
+                </span>
+                <div>
+                  <strong>
+                    {participant.alias}
+                    {participant.isYou ? " (tu)" : ""}
+                  </strong>
+                  <small>
+                    <i className={`activity-dot ${participant.activity}`} />
+                    {participant.isYou ? " Anfitrion" : " Conectado"}
+                  </small>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
           <div className="privacy-note">
             <Shield size={17} />
             <span>Los roles y votos son privados hasta la revelacion.</span>
           </div>
-          <span className="sr-only">Participante: {participantId}</span>
         </aside>
       </div>
     </main>
@@ -267,7 +272,7 @@ function LiveRoundRoom({
   const [sentVotes, setSentVotes] = useState<
     Partial<Record<VotingStage, boolean>>
   >({});
-  const { messages, ext, me, send, setMetadata, status } =
+  const { messages, ext, me, presence, send, setMetadata, status } =
     useChannel<LiveMessage>({
       channelId,
       metadata: { alias: "Gato Ninja", avatar: "#21D4D4", activity: "idle" },
@@ -301,6 +306,38 @@ function LiveRoundRoom({
   }, [me, setMetadata, view?.phase]);
 
   if (!view) {
+    const connectedParticipants: RoundParticipant[] =
+      presence?.kind === "detailed"
+        ? presence.participants.map((participant) => {
+            const metadata = participant.metadata ?? {};
+            const alias =
+              typeof metadata.alias === "string" ? metadata.alias : "Jugador";
+            const avatar =
+              typeof metadata.avatar === "string" ? metadata.avatar : "#21D4D4";
+            const activity =
+              metadata.activity === "clue" ||
+              metadata.activity === "discussion" ||
+              metadata.activity === "voting"
+                ? metadata.activity
+                : "idle";
+            return {
+              id: participant.id,
+              alias,
+              avatar,
+              activity,
+              isYou: participant.id === me?.id,
+            };
+          })
+        : [];
+    if (connectedParticipants.length === 0) {
+      connectedParticipants.push({
+        id: me?.id ?? "pending",
+        alias: "Gato Ninja",
+        avatar: "#21D4D4",
+        activity: "idle",
+        isYou: true,
+      });
+    }
     return (
       <LiveLobby
         onLeave={onLeave}
@@ -310,7 +347,7 @@ function LiveRoundRoom({
             type: "match_action",
           })
         }
-        participantId={me?.id ?? "pending"}
+        participants={connectedParticipants}
         roomCode={channelId.replace(/^room-/, "")}
       />
     );
