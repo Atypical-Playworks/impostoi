@@ -7,7 +7,7 @@ export function isGuestUser(user: SupabaseIdentity): boolean {
 }
 
 export function isPersistentUser(user: SupabaseIdentity): boolean {
-  return !isGuestUser(user);
+  return user.is_anonymous === false;
 }
 
 export function validateGuestMigration(

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { publicRuntimeConfig } from "@/lib/public-env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const signInSchema = z.object({ email: z.string().trim().email() });
@@ -17,11 +18,19 @@ export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.signInWithOtp({
     email: parsed.data.email,
-    options: { emailRedirectTo: `${new URL(request.url).origin}/auth/callback` },
+    options: {
+      emailRedirectTo: new URL(
+        "/auth/callback",
+        publicRuntimeConfig.appUrl,
+      ).toString(),
+    },
   });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 502 });
+    return NextResponse.json(
+      { error: "Unable to send sign-in email" },
+      { status: 502 },
+    );
   }
 
   return NextResponse.json({ sent: true });

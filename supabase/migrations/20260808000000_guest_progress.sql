@@ -31,7 +31,12 @@ create policy "Players can read their progress"
 create policy "Players can read their history"
   on public.player_match_history for select using (auth.uid() = player_id);
 
-create or replace function public.migrate_guest_progress(source_guest_id uuid)
+drop function if exists public.migrate_guest_progress(uuid);
+
+create or replace function public.migrate_guest_progress(
+  source_guest_id uuid,
+  destination_player_id uuid
+)
 returns table (migrated_matches integer)
 language plpgsql
 security definer
@@ -40,7 +45,11 @@ as $$
 declare
   moved integer;
 begin
-  if auth.uid() is null or (select is_anonymous from auth.users where id = auth.uid()) then
+  if not exists (
+    select 1
+    from auth.users
+    where id = destination_player_id and is_anonymous = false
+  ) then
     raise exception 'A persistent account is required';
   end if;
 
@@ -50,29 +59,29 @@ begin
     raise exception 'The source must be a Guest session';
   end if;
 
-  if source_guest_id = auth.uid() then
+  if source_guest_id = destination_player_id then
     raise exception 'A Guest session cannot migrate to itself';
   end if;
 
   insert into public.guest_progress_migrations (guest_player_id, persistent_player_id)
-  values (source_guest_id, auth.uid());
+  values (source_guest_id, destination_player_id);
 
   delete from public.player_match_history source_history
   where source_history.player_id = source_guest_id
     and exists (
       select 1
       from public.player_match_history destination_history
-      where destination_history.player_id = auth.uid()
+      where destination_history.player_id = destination_player_id
         and destination_history.match_id = source_history.match_id
     );
 
   update public.player_match_history
-  set player_id = auth.uid()
+  set player_id = destination_player_id
   where player_id = source_guest_id;
   get diagnostics moved = row_count;
 
   insert into public.player_progress (player_id, rounds_played, ai_detections, impostor_detections)
-  select auth.uid(), rounds_played, ai_detections, impostor_detections
+  select destination_player_id, rounds_played, ai_detections, impostor_detections
   from public.player_progress
   where player_id = source_guest_id
   on conflict (player_id) do update set
@@ -86,5 +95,5 @@ begin
 end;
 $$;
 
-revoke all on function public.migrate_guest_progress(uuid) from public;
-grant execute on function public.migrate_guest_progress(uuid) to authenticated;
+revoke all on function public.migrate_guest_progress(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.migrate_guest_progress(uuid, uuid) to service_role;
