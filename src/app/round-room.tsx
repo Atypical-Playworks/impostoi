@@ -92,7 +92,7 @@ export function RoundRoom({ onLeave }: { onLeave: () => void }) {
           impostoi <span>ROOM IMPOST</span>
         </div>
         <div className="connection-status">
-          <i /> Vista de demostracion
+          <i /> Demo reproducible · Estado local
         </div>
       </header>
 
@@ -320,13 +320,11 @@ function Discussion({
           placeholder="Escribe al grupo..."
           maxLength={280}
         />
-        <button
-          type="button"
-          className="round-primary"
-          disabled={secondsLeft > 0}
-          onClick={onContinue}
-        >
-          Cerrar discusion y votar <Target size={18} />
+        <button type="button" className="round-primary" onClick={onContinue}>
+          {secondsLeft > 0
+            ? "Avanzar en la demo y votar"
+            : "Cerrar discusion y votar"}{" "}
+          <Target size={18} />
         </button>
       </div>
     </div>
@@ -445,8 +443,14 @@ function Results() {
       <p className="eyebrow">Ronda completada</p>
       <h2>Buen ojo, equipo</h2>
       <p>La siguiente ronda cambiara la palabra y los roles.</p>
-      <button type="button" className="round-primary">
-        Preparar ronda 2 <Target size={19} />
+      <div className="replay-summary">
+        <strong>Replay pendiente</strong>
+        <span>
+          Esta vista reproducible no carga todavía el Replay persistido.
+        </span>
+      </div>
+      <button type="button" className="round-primary" disabled>
+        Replay no disponible en esta vista <Target size={19} />
       </button>
     </div>
   );
