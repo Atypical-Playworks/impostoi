@@ -1,0 +1,282 @@
+export const MATCH_ROUNDS = 3;
+
+export type MatchPhase =
+  | "lobby"
+  | "clue_phase"
+  | "discussion"
+  | "voting"
+  | "reveal"
+  | "results";
+
+export type VotingStage = "ai_detection" | "impostor";
+export type ParticipantKind = "player" | "agent";
+export type HiddenRole = "civilian" | "impostor";
+
+export type Participant = {
+  id: string;
+  alias: string;
+  avatar: string;
+  kind: ParticipantKind;
+};
+
+export type PublicParticipant = Omit<Participant, "kind">;
+
+type PrivateRound = {
+  category: string;
+  secretWord: string;
+  agentId: string;
+  impostorId: string;
+  clues: Map<string, string>;
+  votes: {
+    ai_detection: Map<string, string>;
+    impostor: Map<string, string>;
+  };
+};
+
+export type GameState = {
+  matchId: string;
+  hostId: string;
+  roundNumber: number;
+  phase: MatchPhase;
+  votingStage?: VotingStage;
+  participants: readonly Participant[];
+  round: PrivateRound;
+  discussion: string;
+};
+
+export type PublicGameView = {
+  matchId: string;
+  roundNumber: number;
+  phase: MatchPhase;
+  votingStage?: VotingStage;
+  participants: readonly PublicParticipant[];
+  category: string;
+  clues: readonly { alias: string; text: string }[];
+  discussion: string;
+  voteTally?: Readonly<Record<string, number>>;
+  impostorVoteTally?: Readonly<Record<string, number>>;
+};
+
+export type PrivateGameView = PublicGameView & {
+  role: HiddenRole;
+  secretWord?: string;
+  ownVotes: Partial<Record<VotingStage, string>>;
+};
+
+export type CreateGameInput = {
+  matchId: string;
+  hostId: string;
+  participants: readonly Participant[];
+  category: string;
+  secretWord: string;
+  agentId: string;
+  random?: () => number;
+};
+
+export class GameStateError extends Error {
+  constructor(public readonly code: string) {
+    super(code);
+    this.name = "GameStateError";
+  }
+}
+
+function requireParticipant(state: GameState, actorId: string): Participant {
+  const participant = state.participants.find(({ id }) => id === actorId);
+  if (!participant) throw new GameStateError("unauthorized");
+  return participant;
+}
+
+function requireHost(state: GameState, actorId: string): void {
+  requireParticipant(state, actorId);
+  if (state.hostId !== actorId) throw new GameStateError("forbidden");
+}
+
+function requirePhase(state: GameState, phase: MatchPhase): void {
+  if (state.phase !== phase) throw new GameStateError("invalid-phase");
+}
+
+function copyState(state: GameState, changes: Partial<GameState>): GameState {
+  return { ...state, ...changes };
+}
+
+function tally(votes: Map<string, string>): Readonly<Record<string, number>> {
+  return Object.fromEntries(
+    [...votes.values()].reduce((counts, target) => {
+      counts.set(target, (counts.get(target) ?? 0) + 1);
+      return counts;
+    }, new Map<string, number>()),
+  );
+}
+
+function allSubmitted(state: GameState, votes: Map<string, string>): boolean {
+  return votes.size === state.participants.length;
+}
+
+export function createGame(input: CreateGameInput): GameState {
+  const players = input.participants.filter(({ kind }) => kind === "player");
+  if (players.length < 4 || players.length > 5) {
+    throw new GameStateError("invalid-player-count");
+  }
+  if (
+    input.participants.length !== players.length + 1 ||
+    !input.participants.some(
+      ({ id, kind }) => id === input.agentId && kind === "agent",
+    )
+  ) {
+    throw new GameStateError("invalid-agent");
+  }
+  if (
+    new Set(input.participants.map(({ id }) => id)).size !==
+    input.participants.length
+  ) {
+    throw new GameStateError("duplicate-participant");
+  }
+  if (!input.category.trim() || !input.secretWord.trim()) {
+    throw new GameStateError("invalid-round-data");
+  }
+
+  const random = input.random ?? Math.random;
+  const impostor =
+    input.participants[Math.floor(random() * input.participants.length)];
+  if (!impostor) throw new GameStateError("invalid-random");
+
+  return {
+    matchId: input.matchId,
+    hostId: input.hostId,
+    roundNumber: 1,
+    phase: "lobby",
+    participants: input.participants,
+    round: {
+      category: input.category,
+      secretWord: input.secretWord,
+      agentId: input.agentId,
+      impostorId: impostor.id,
+      clues: new Map(),
+      votes: { ai_detection: new Map(), impostor: new Map() },
+    },
+    discussion: "",
+  };
+}
+
+export function startCluePhase(state: GameState, actorId: string): GameState {
+  requireHost(state, actorId);
+  requirePhase(state, "lobby");
+  return copyState(state, { phase: "clue_phase" });
+}
+
+export function submitClue(
+  state: GameState,
+  actorId: string,
+  text: string,
+): GameState {
+  requireParticipant(state, actorId);
+  requirePhase(state, "clue_phase");
+  if (!text.trim()) throw new GameStateError("invalid-clue");
+  if (state.round.clues.has(actorId))
+    throw new GameStateError("duplicate-clue");
+  const clues = new Map(state.round.clues);
+  clues.set(actorId, text.trim());
+  return copyState(state, { round: { ...state.round, clues } });
+}
+
+export function startDiscussion(state: GameState, actorId: string): GameState {
+  requireHost(state, actorId);
+  requirePhase(state, "clue_phase");
+  if (!allSubmitted(state, state.round.clues))
+    throw new GameStateError("clues-incomplete");
+  return copyState(state, { phase: "discussion" });
+}
+
+export function startVoting(
+  state: GameState,
+  actorId: string,
+  discussion: string,
+): GameState {
+  requireHost(state, actorId);
+  requirePhase(state, "discussion");
+  return copyState(state, {
+    phase: "voting",
+    votingStage: "ai_detection",
+    discussion: discussion.trim(),
+  });
+}
+
+export function submitVote(
+  state: GameState,
+  actorId: string,
+  targetId: string,
+): GameState {
+  requireParticipant(state, actorId);
+  requirePhase(state, "voting");
+  requireParticipant(state, targetId);
+  const stage = state.votingStage ?? "ai_detection";
+  const votes = new Map(state.round.votes[stage]);
+  if (votes.has(actorId)) throw new GameStateError("duplicate-vote");
+  votes.set(actorId, targetId);
+  const round = {
+    ...state.round,
+    votes: { ...state.round.votes, [stage]: votes },
+  };
+  if (!allSubmitted(state, votes)) return copyState(state, { round });
+  if (stage === "ai_detection") {
+    return copyState(state, { round, votingStage: "impostor" });
+  }
+  return copyState(state, { round, phase: "reveal", votingStage: undefined });
+}
+
+export function showResults(state: GameState, actorId: string): GameState {
+  requireHost(state, actorId);
+  requirePhase(state, "reveal");
+  return copyState(state, { phase: "results" });
+}
+
+export function viewFor(state: GameState, viewerId: string): PrivateGameView {
+  requireParticipant(state, viewerId);
+  const role: HiddenRole =
+    viewerId === state.round.impostorId ? "impostor" : "civilian";
+  const publicView = publicViewFor(state);
+  return {
+    ...publicView,
+    role,
+    ...(role === "civilian" ? { secretWord: state.round.secretWord } : {}),
+    ownVotes: {
+      ...(state.round.votes.ai_detection.has(viewerId)
+        ? { ai_detection: state.round.votes.ai_detection.get(viewerId) }
+        : {}),
+      ...(state.round.votes.impostor.has(viewerId)
+        ? { impostor: state.round.votes.impostor.get(viewerId) }
+        : {}),
+    },
+  };
+}
+
+export function publicViewFor(state: GameState): PublicGameView {
+  const participants = state.participants.map(({ id, alias, avatar }) => ({
+    id,
+    alias,
+    avatar,
+  }));
+  const clues = [...state.round.clues].map(([id, text]) => ({
+    alias:
+      state.participants.find((participant) => participant.id === id)?.alias ??
+      "",
+    text,
+  }));
+  const reveal = state.phase === "reveal" || state.phase === "results";
+  return {
+    matchId: state.matchId,
+    roundNumber: state.roundNumber,
+    phase: state.phase,
+    ...(state.votingStage ? { votingStage: state.votingStage } : {}),
+    participants,
+    category: state.round.category,
+    clues,
+    discussion: state.discussion,
+    ...(reveal
+      ? {
+          voteTally: tally(state.round.votes.ai_detection),
+          impostorVoteTally: tally(state.round.votes.impostor),
+        }
+      : {}),
+  };
+}
