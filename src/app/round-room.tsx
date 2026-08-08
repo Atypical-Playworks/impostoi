@@ -1,5 +1,7 @@
 "use client";
 
+import { Portal } from "@portalsdk/core";
+import { PortalProvider, useChannel } from "@portalsdk/react";
 import {
   Check,
   ChevronLeft,
@@ -13,8 +15,13 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-
-import type { MatchPhase, VotingStage } from "@/lib/game-state";
+import type {
+  MatchPhase,
+  PrivateGameView,
+  VotingStage,
+} from "@/lib/game-state";
+import { liveAction, readLiveMatchView } from "@/lib/live-match";
+import { publicRuntimeConfig } from "@/lib/public-env";
 import {
   canSubmitClue,
   formatTimer,
@@ -56,7 +63,306 @@ const activityLabels = {
   voting: "Votando",
 };
 
-export function RoundRoom({ onLeave }: { onLeave: () => void }) {
+type LiveSetup =
+  | { status: "loading" }
+  | { status: "fallback" }
+  | { status: "error" }
+  | { status: "ready"; client: Portal; token: string };
+
+export function RoundRoom({
+  onLeave,
+  roomId = "IMPOST",
+}: {
+  onLeave: () => void;
+  roomId?: string;
+}) {
+  const [setup, setSetup] = useState<LiveSetup>({ status: "loading" });
+
+  useEffect(() => {
+    if (
+      !publicRuntimeConfig.portalKey ||
+      !publicRuntimeConfig.supabaseUrl ||
+      !publicRuntimeConfig.supabasePublishableKey
+    ) {
+      setSetup({ status: "fallback" });
+      return;
+    }
+
+    let active = true;
+    async function connect() {
+      try {
+        const guest = await fetch("/api/auth/guest", { method: "POST" });
+        if (!guest.ok) throw new Error("guest-session");
+        const tokenResponse = await fetch("/api/portal/token", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ roomId }),
+        });
+        if (!tokenResponse.ok) throw new Error("portal-token");
+        const payload = (await tokenResponse.json()) as { token?: string };
+        if (!payload.token) throw new Error("portal-token");
+        if (active) {
+          setSetup({
+            status: "ready",
+            client: new Portal({ apiKey: publicRuntimeConfig.portalKey }),
+            token: payload.token,
+          });
+        }
+      } catch {
+        if (active) setSetup({ status: "error" });
+      }
+    }
+    void connect();
+    return () => {
+      active = false;
+    };
+  }, [roomId]);
+
+  if (setup.status === "fallback") return <DemoRoundRoom onLeave={onLeave} />;
+  if (setup.status === "loading") {
+    return (
+      <RoundConnection onLeave={onLeave} label="Conectando con la sala..." />
+    );
+  }
+  if (setup.status === "error") {
+    return (
+      <RoundConnection
+        onLeave={onLeave}
+        label="No se pudo conectar con la sala"
+      />
+    );
+  }
+  return (
+    <PortalProvider client={setup.client} token={setup.token}>
+      <LiveRoundRoom channelId={`room-${roomId}`} onLeave={onLeave} />
+    </PortalProvider>
+  );
+}
+
+function RoundConnection({
+  onLeave,
+  label,
+}: {
+  onLeave: () => void;
+  label: string;
+}) {
+  return (
+    <main className="round-shell">
+      <header className="round-header">
+        <button type="button" className="back-button" onClick={onLeave}>
+          <ChevronLeft size={18} /> Salir de la sala
+        </button>
+        <div className="round-brand">
+          impostoi <span>ROOM IMPOST</span>
+        </div>
+        <div className="connection-status">
+          <i /> {label}
+        </div>
+      </header>
+    </main>
+  );
+}
+
+type LiveMessage = {
+  [key: string]: unknown;
+};
+
+function LiveRoundRoom({
+  channelId,
+  onLeave,
+}: {
+  channelId: string;
+  onLeave: () => void;
+}) {
+  const [draftClue, setDraftClue] = useState("");
+  const [draftDiscussion, setDraftDiscussion] = useState("");
+  const [selectedVote, setSelectedVote] = useState<string | null>(null);
+  const [sentClue, setSentClue] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [sentVotes, setSentVotes] = useState<
+    Partial<Record<VotingStage, boolean>>
+  >({});
+  const { messages, ext, me, send, setMetadata, status } =
+    useChannel<LiveMessage>({
+      channelId,
+      metadata: { alias: "Gato Ninja", avatar: "#21D4D4", activity: "idle" },
+    });
+
+  let view: PrivateGameView | null = readLiveMatchView(ext?.match);
+  for (const message of messages) {
+    const next = readLiveMatchView(message.content);
+    if (next) view = next;
+  }
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (me)
+      setMetadata({
+        alias: "Gato Ninja",
+        avatar: "#21D4D4",
+        activity:
+          view?.phase === "clue_phase"
+            ? "clue"
+            : view?.phase === "discussion"
+              ? "discussion"
+              : view?.phase === "voting"
+                ? "voting"
+                : "idle",
+      });
+  }, [me, setMetadata, view?.phase]);
+
+  if (!view) {
+    return (
+      <RoundConnection
+        onLeave={onLeave}
+        label={
+          status === "blocked"
+            ? "Sala no disponible"
+            : "Esperando el estado de la partida..."
+        }
+      />
+    );
+  }
+
+  const participants = view.participants.map((participant) => ({
+    ...participant,
+    activity: "idle" as const,
+    isYou: participant.id === me?.id,
+  }));
+  const stage = view.votingStage ?? "ai_detection";
+  const submit = async (content: Record<string, unknown>) => {
+    await send({ content, type: "match_action" });
+  };
+  const submitClue = async () => {
+    const text = draftClue.trim();
+    if (!text || sentClue !== null) return;
+    await submit(liveAction("submit_clue", { text }));
+    setSentClue(text);
+    setDraftClue("");
+  };
+  const submitVote = async () => {
+    if (!selectedVote || sentVotes[stage]) return;
+    await submit(liveAction("submit_vote", { stage, targetId: selectedVote }));
+    setSentVotes((current) => ({ ...current, [stage]: true }));
+    setSelectedVote(null);
+  };
+
+  return (
+    <main className="round-shell">
+      <header className="round-header">
+        <button type="button" className="back-button" onClick={onLeave}>
+          <ChevronLeft size={18} /> Salir de la sala
+        </button>
+        <div className="round-brand">
+          impostoi <span>ROOM IMPOST</span>
+        </div>
+        <div className="connection-status">
+          <i /> {status === "ready" ? "Portal conectado" : status}
+        </div>
+      </header>
+      <div className="round-layout">
+        <section className="round-main">
+          <div className="round-heading">
+            <div>
+              <p className="eyebrow">Ronda {view.roundNumber} de 3</p>
+              <h1>{phaseTitle(view.phase)}</h1>
+            </div>
+            <div className="round-timer">
+              <Clock3 size={19} />{" "}
+              {formatTimer(
+                view.phaseDeadlineAt
+                  ? Math.max(0, Math.ceil((view.phaseDeadlineAt - now) / 1000))
+                  : 0,
+              )}
+            </div>
+          </div>
+          {view.phase === "lobby" ? (
+            <Lobby
+              onStart={() => void submit(liveAction("start_clue_phase"))}
+            />
+          ) : null}
+          {view.phase === "clue_phase" ? (
+            <CluePhase
+              clue={draftClue}
+              clues={view.clues}
+              submittedClue={sentClue}
+              category={view.category}
+              secretWord={view.secretWord}
+              onChange={setDraftClue}
+              onSubmit={() => void submitClue()}
+              onContinue={() => void submit(liveAction("start_discussion"))}
+            />
+          ) : null}
+          {view.phase === "discussion" ? (
+            <Discussion
+              value={draftDiscussion}
+              onChange={setDraftDiscussion}
+              onContinue={() =>
+                void submit(
+                  liveAction("start_voting", { discussion: draftDiscussion }),
+                )
+              }
+            />
+          ) : null}
+          {view.phase === "voting" ? (
+            <Voting
+              stage={stage}
+              participantList={participants}
+              selected={selectedVote}
+              submitted={Boolean(sentVotes[stage] || view.ownVotes[stage])}
+              votes={{}}
+              onSelect={setSelectedVote}
+              onSubmit={() => void submitVote()}
+              onContinue={() => undefined}
+            />
+          ) : null}
+          {view.phase === "reveal" ? (
+            <Reveal onResults={() => void submit(liveAction("show_results"))} />
+          ) : null}
+          {view.phase === "results" ? <Results /> : null}
+        </section>
+        <aside className="round-sidebar">
+          <div className="sidebar-heading">
+            <Users size={19} />
+            <strong>Participantes</strong>
+            <span>{participants.length}/6</span>
+          </div>
+          <div className="participant-list">
+            {participants.map((participant) => (
+              <div className="participant-card" key={participant.id}>
+                <span
+                  className="round-avatar"
+                  style={{ backgroundColor: participant.avatar }}
+                >
+                  {participant.alias[0]}
+                </span>
+                <div>
+                  <strong>
+                    {participant.alias}
+                    {participant.isYou ? " (tu)" : ""}
+                  </strong>
+                  <small>
+                    <i className="activity-dot idle" /> Listo
+                  </small>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="privacy-note">
+            <Shield size={17} />
+            <span>Los roles y votos son privados hasta la revelacion.</span>
+          </div>
+        </aside>
+      </div>
+    </main>
+  );
+}
+
+function DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
   const [phase, setPhase] = useState<MatchPhase>("lobby");
   const [votingStage, setVotingStage] = useState<VotingStage>("ai_detection");
   const [clue, setClue] = useState("");
@@ -207,13 +513,17 @@ function CluePhase({
   clue,
   clues,
   submittedClue,
+  category = "Animales",
+  secretWord,
   onChange,
   onSubmit,
   onContinue,
 }: {
   clue: string;
-  clues: { alias: string; text: string }[];
+  clues: readonly { alias: string; text: string }[];
   submittedClue: string | null;
+  category?: string;
+  secretWord?: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
   onContinue: () => void;
@@ -222,10 +532,10 @@ function CluePhase({
     <div className="phase-stack">
       <div className="word-card">
         <span>Categoria</span>
-        <strong>Animales</strong>
+        <strong>{category}</strong>
         <div className="secret-word">
           <span>Palabra privada</span>
-          <b>No disponible en la demo</b>
+          <b>{secretWord ?? "No disponible en la demo"}</b>
         </div>
       </div>
       <div className="round-card clue-card">
@@ -333,6 +643,7 @@ function Discussion({
 
 function Voting({
   stage,
+  participantList = participants,
   selected,
   submitted,
   votes,
@@ -341,6 +652,7 @@ function Voting({
   onContinue,
 }: {
   stage: VotingStage;
+  participantList?: readonly RoundParticipant[];
   selected: string | null;
   submitted: boolean;
   votes: Partial<Record<VotingStage, string>>;
@@ -366,7 +678,7 @@ function Voting({
         <h2>{votingTitle(stage)}</h2>
         <p>Tu voto es privado y no se puede cambiar.</p>
         <div className="vote-options">
-          {participants.map((participant) => (
+          {participantList.map((participant) => (
             <button
               type="button"
               className={
