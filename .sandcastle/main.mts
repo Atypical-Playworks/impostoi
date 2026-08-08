@@ -8,9 +8,10 @@ import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 
 const exec = promisify(execFile);
 const MAX_PARALLEL = 2;
-const MODEL = "gpt-5.6-luna";
+const MODEL = "openai/gpt-5.6-luna";
 
-const githubToken = (await exec("gh", ["auth", "token"])).stdout.trim();
+const githubToken =
+  process.env.GH_TOKEN ?? (await exec("gh", ["auth", "token"])).stdout.trim();
 
 const sandboxProvider = () =>
   docker({
@@ -20,7 +21,7 @@ const sandboxProvider = () =>
     mounts: [
       {
         hostPath: join(homedir(), ".local", "share", "opencode", "auth.json"),
-        sandboxPath: "/home/agent/.local/share/opencode/auth.json",
+        sandboxPath: "/home/agent/.local/share/opencode-auth-source.json",
         readonly: true,
       },
     ],
@@ -34,9 +35,17 @@ const agent = () =>
 
 const hooks = {
   sandbox: {
-    onSandboxReady: [{ command: "bun install --frozen-lockfile" }],
+    onSandboxReady: [
+      {
+        command:
+          "mkdir -p ~/.local/share/opencode && cp ~/.local/share/opencode-auth-source.json ~/.local/share/opencode/auth.json && chmod 600 ~/.local/share/opencode/auth.json",
+      },
+      { command: "bun install --frozen-lockfile" },
+    ],
   },
 };
+
+const copyToWorktree = ["node_modules"];
 
 const listed = await exec("gh", [
   "issue",
@@ -132,13 +141,14 @@ const settled = await Promise.allSettled(
       branch: issue.branch,
       sandbox: sandboxProvider(),
       hooks,
+      copyToWorktree,
     });
 
     try {
       const implementation = await sandbox.run({
         agent: agent(),
         name: `implement-${issue.id}`,
-        maxIterations: 1,
+        maxIterations: 100,
         idleTimeoutSeconds: 1_800,
         promptFile: "./.sandcastle/implement-prompt.md",
         promptArgs: {
