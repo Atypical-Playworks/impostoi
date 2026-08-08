@@ -28,12 +28,12 @@ Participants are `Luna Pixel`, `Sol Rebelde`, `Rio Turbo`, and `Nube`.
 | 00:00-00:08 | Open the product, create room `IMPOST`, and show the 4-5 Players plus one hidden Agent. |
 | 00:08-00:18 | Start the Round. Point out random Aliases, Avatars, Presence, the public Category, and the private-word card. |
 | 00:18-00:30 | Submit one Clue as `Gato Ninja`; show the immutable public Clue list and the other Participants' activity. |
-| 00:30-00:40 | Show the late joiner indicator: Portal sends the current room snapshot, including phase and Presence, instead of restarting the Match. |
-| 00:40-00:50 | Advance the demo Discussion and show the public conversation surface. Explain that Portal carries the live room state. |
-| 00:50-01:04 | Submit the private AI detection vote. Show that the vote is acknowledged without exposing other votes. |
-| 01:04-01:16 | Submit the private Impostor vote. Explain that the two hidden roles are assigned independently. |
-| 01:16-01:24 | Reveal the roles and vote tallies. The Agent identity and Impostor identity become visible only after voting closes. |
-| 01:24-01:30 | Open the Replay result: public Clues, timing, votes, structured Agent behavior, and outcome are retained for the post-match view. |
+| 00:30-00:40 | Explain that the production room uses a Portal snapshot for late joiners; do not present the local reproducible view as a live Portal connection. |
+| 00:40-00:50 | Advance the reproducible Discussion and show the public conversation surface. Explain that the production room uses Portal for live state. |
+| 00:50-01:04 | Submit the local demo's AI detection vote; the production room acknowledges private votes without exposing other votes. |
+| 01:04-01:16 | Submit the local demo's Impostor vote. Explain that the two hidden roles are assigned independently in the production room. |
+| 01:16-01:24 | Show the demo reveal surface and explain that production reveals roles and tallies only after voting closes. |
+| 01:24-01:30 | Describe the persisted Replay contract; this local reproducible view does not open a Replay. |
 
 If narration needs more time, cut between phase transitions rather than
 waiting on timers. The Discussion control is intentionally advanceable in the
@@ -45,7 +45,9 @@ Portal is the authority for each live Match room. Its standard channel carries
 Presence, phase transitions, public Clues, private role delivery, private
 votes, and the late-join snapshot. The browser renders that state and requests
 actions; it does not decide outcomes. Supabase stores completed Match history,
-Replays, and progression after the live session.
+Replays, and progression after the live session. The reproducible recording
+view in this branch is local demo scaffolding and must not be described as a
+live Portal room or as an opened Replay.
 
 ## Release validation
 

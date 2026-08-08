@@ -21,7 +21,21 @@ export type SubmissionCheck = {
 function isPublicUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.username ||
+      url.password
+    ) {
+      return false;
+    }
+
+    const hostname = url.hostname.toLowerCase();
+    return (
+      hostname !== "localhost" &&
+      hostname !== "127.0.0.1" &&
+      hostname !== "[::1]" &&
+      !hostname.endsWith(".local")
+    );
   } catch {
     return false;
   }
@@ -38,6 +52,7 @@ export function validateSubmission(input: SubmissionInput): SubmissionCheck {
   if (!isPublicUrl(input.demoUrl)) errors.push("demo-url-invalid");
   if (!isPublicUrl(input.repositoryUrl)) errors.push("repository-url-invalid");
   if (input.tag !== HACKATHON_TAG) errors.push("required-tag-missing");
+  if (input.commitDates.length === 0) errors.push("commit-required");
 
   for (const date of input.commitDates) {
     const timestamp = Date.parse(date);

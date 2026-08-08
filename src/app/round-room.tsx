@@ -92,7 +92,7 @@ export function RoundRoom({ onLeave }: { onLeave: () => void }) {
           impostoi <span>ROOM IMPOST</span>
         </div>
         <div className="connection-status">
-          <i /> Demo reproducible · Portal conectado
+          <i /> Demo reproducible · Estado local
         </div>
       </header>
 
@@ -180,10 +180,6 @@ export function RoundRoom({ onLeave }: { onLeave: () => void }) {
           <div className="privacy-note">
             <Shield size={17} />
             <span>Los roles y votos son privados hasta la revelacion.</span>
-          </div>
-          <div className="snapshot-note">
-            <Check size={17} />
-            <span>Entrada tardia: snapshot actual recibido por Portal.</span>
           </div>
         </aside>
       </div>
@@ -448,11 +444,13 @@ function Results() {
       <h2>Buen ojo, equipo</h2>
       <p>La siguiente ronda cambiara la palabra y los roles.</p>
       <div className="replay-summary">
-        <strong>Replay disponible</strong>
-        <span>Claves publicas, tiempos, votos y resultado de esta ronda.</span>
+        <strong>Replay pendiente</strong>
+        <span>
+          Esta vista reproducible no carga todavía el Replay persistido.
+        </span>
       </div>
-      <button type="button" className="round-primary">
-        Ver Replay <Target size={19} />
+      <button type="button" className="round-primary" disabled>
+        Replay no disponible en esta vista <Target size={19} />
       </button>
     </div>
   );

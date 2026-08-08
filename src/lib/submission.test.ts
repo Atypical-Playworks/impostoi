@@ -52,4 +52,21 @@ describe("hackathon submission validation", () => {
 
     expect(result.errors).toContain("pitch-too-long");
   });
+
+  test("requires public links and at least one in-window commit", () => {
+    const result = validateSubmission({
+      pitch: "pitch",
+      deployedUrl: "http://localhost:3000",
+      demoUrl: "https://demo.example/video",
+      repositoryUrl: "https://user:password@example.com/repo",
+      tag: HACKATHON_TAG,
+      commitDates: [],
+    });
+
+    expect(result.errors).toEqual([
+      "deployed-url-invalid",
+      "repository-url-invalid",
+      "commit-required",
+    ]);
+  });
 });
