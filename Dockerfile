@@ -9,7 +9,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN bun run build
 
-FROM oven/bun:1.3.14-slim AS runner
+FROM oven/bun:1.3.14 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
