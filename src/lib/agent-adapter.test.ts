@@ -49,6 +49,28 @@ describe("OpenCode Zen Agent adapter", () => {
     expect(systemPrompt).toContain("cautious-imitator");
   });
 
+  test("uses the model supplied by the request", async () => {
+    let modelId = "";
+    const generate: GenerateStructuredObject = async ({ model }) => {
+      modelId = (model as { modelId: string }).modelId;
+      return { object: { text: "Una pista" } };
+    };
+
+    await createAgentAdapter(
+      { apiKey: "secret-key", baseUrl: "https://opencode.example/v1" },
+      generate,
+    ).act({
+      ...request,
+      model: {
+        id: "another-model",
+        provider: "opencode-zen",
+        version: "another-model-v1",
+      },
+    });
+
+    expect(modelId).toBe("another-model");
+  });
+
   test("uses a deterministic fallback when the provider times out", async () => {
     let wasAborted = false;
     const neverCompletes: GenerateStructuredObject = ({ abortSignal }) => {
