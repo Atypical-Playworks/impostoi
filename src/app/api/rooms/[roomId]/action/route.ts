@@ -224,42 +224,21 @@ export async function POST(
       nonNullState.activeTurnId === "agent" &&
       activeTurnBeforeAction !== "agent"
     ) {
-      const config = readServerRuntimeConfig();
-      const adapter = createAgentAdapter({
-        apiKey: config.opencodeZenApiKey,
-        baseUrl: config.opencodeZenBaseUrl,
-        timeoutMs: 4000,
-      });
-
-      const publicClues = [...nonNullState.round.clues.entries()].map(
-        ([id, text]) => ({
-          alias:
-            nonNullState.participants.find((p) => p.id === id)?.alias ?? id,
-          text,
-        }),
+      const { data: claimed, error: claimError } = await admin.rpc(
+        "claim_agent_turn",
+        {
+          requested_code: code,
+          requested_match_id: nonNullState.matchId,
+          requested_turn_key: `clue:${nonNullState.roundNumber}`,
+        },
       );
-      const isImpostor = nonNullState.round.impostorId === "agent";
-
-      const result = await adapter.act({
-        action: "clue",
-        model: { id: config.opencodeModel, provider: "opencode", version: "1" },
-        strategy: "cautious-imitator",
-        role: isImpostor ? "impostor" : "civilian",
-        category: nonNullState.round.category,
-        secretWord: isImpostor ? undefined : nonNullState.round.secretWord,
-        clues: publicClues,
-        discussion: "",
-      });
-
-      if (result.action === "clue" && "text" in result.output) {
-        state = submitClue(state, "agent", result.output.text);
+      if (claimError)
+        return NextResponse.json(roomError("room-unavailable"), {
+          status: 503,
+        });
+      if (claimed !== true) {
+        state = nonNullState;
       } else {
-        state = submitClue(state, "agent", "naturaleza");
-      }
-    } else if (nonNullState.phase === "voting") {
-      const currentVotes =
-        nonNullState.round.votes[nonNullState.votingStage ?? "ai_detection"];
-      if (!currentVotes.has("agent")) {
         const config = readServerRuntimeConfig();
         const adapter = createAgentAdapter({
           apiKey: config.opencodeZenApiKey,
@@ -274,9 +253,10 @@ export async function POST(
             text,
           }),
         );
-        const isImpostor = state.round.impostorId === "agent";
+        const isImpostor = nonNullState.round.impostorId === "agent";
+
         const result = await adapter.act({
-          action: "vote",
+          action: "clue",
           model: {
             id: config.opencodeModel,
             provider: "opencode",
@@ -284,28 +264,99 @@ export async function POST(
           },
           strategy: "cautious-imitator",
           role: isImpostor ? "impostor" : "civilian",
-          category: state.round.category,
-          secretWord: isImpostor ? undefined : state.round.secretWord,
+          category: nonNullState.round.category,
+          secretWord: isImpostor ? undefined : nonNullState.round.secretWord,
           clues: publicClues,
           discussion: "",
         });
 
-        if (result.action === "vote" && "alias" in result.output) {
-          const targetAlias = result.output.alias;
-          const target = state.participants.find(
-            (p) => p.alias === targetAlias,
+        if (result.action === "clue" && "text" in result.output) {
+          state = submitClue(state, "agent", result.output.text);
+        } else {
+          state = submitClue(state, "agent", "naturaleza");
+        }
+        console.info("Agent clue completed", {
+          roomCode: code,
+          round: nonNullState.roundNumber,
+          fallback: result.metadata.fallback,
+          responseTimeMs: result.metadata.responseTimeMs,
+        });
+      }
+    } else if (nonNullState.phase === "voting") {
+      const currentVotes =
+        nonNullState.round.votes[nonNullState.votingStage ?? "ai_detection"];
+      if (!currentVotes.has("agent")) {
+        const { data: claimed, error: claimError } = await admin.rpc(
+          "claim_agent_turn",
+          {
+            requested_code: code,
+            requested_match_id: nonNullState.matchId,
+            requested_turn_key: `vote:${nonNullState.roundNumber}:${nonNullState.votingStage ?? "ai_detection"}`,
+          },
+        );
+        if (claimError)
+          return NextResponse.json(roomError("room-unavailable"), {
+            status: 503,
+          });
+        if (claimed !== true) {
+          state = nonNullState;
+        } else {
+          const config = readServerRuntimeConfig();
+          const adapter = createAgentAdapter({
+            apiKey: config.opencodeZenApiKey,
+            baseUrl: config.opencodeZenBaseUrl,
+            timeoutMs: 4000,
+          });
+
+          const publicClues = [...nonNullState.round.clues.entries()].map(
+            ([id, text]) => ({
+              alias:
+                nonNullState.participants.find((p) => p.id === id)?.alias ?? id,
+              text,
+            }),
           );
-          if (target && target.id !== "agent") {
-            state = submitVote(state, "agent", target.id);
+          const isImpostor = state.round.impostorId === "agent";
+          const result = await adapter.act({
+            action: "vote",
+            model: {
+              id: config.opencodeModel,
+              provider: "opencode",
+              version: "1",
+            },
+            strategy: "cautious-imitator",
+            role: isImpostor ? "impostor" : "civilian",
+            category: state.round.category,
+            secretWord: isImpostor ? undefined : state.round.secretWord,
+            clues: publicClues,
+            discussion: "",
+          });
+
+          if (result.action === "vote" && "alias" in result.output) {
+            const targetAlias = result.output.alias;
+            const target = state.participants.find(
+              (p) => p.alias === targetAlias,
+            );
+            if (target && target.id !== "agent") {
+              state = submitVote(state, "agent", target.id);
+            } else {
+              const fallback = state.participants.find(
+                (p) => p.kind === "player",
+              );
+              if (fallback) state = submitVote(state, "agent", fallback.id);
+            }
           } else {
             const fallback = state.participants.find(
               (p) => p.kind === "player",
             );
             if (fallback) state = submitVote(state, "agent", fallback.id);
           }
-        } else {
-          const fallback = state.participants.find((p) => p.kind === "player");
-          if (fallback) state = submitVote(state, "agent", fallback.id);
+          console.info("Agent vote completed", {
+            roomCode: code,
+            round: nonNullState.roundNumber,
+            stage: nonNullState.votingStage ?? "ai_detection",
+            fallback: result.metadata.fallback,
+            responseTimeMs: result.metadata.responseTimeMs,
+          });
         }
       }
     }

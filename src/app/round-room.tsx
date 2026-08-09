@@ -13,7 +13,7 @@ import {
   Target,
   Users,
 } from "lucide-react";
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type {
   MatchPhase,
   PrivateGameView,
@@ -489,6 +489,7 @@ function LiveRoundRoom({
   const hasMatchView = view !== null;
   const hasPresenceSnapshot = presence?.kind === "detailed";
   const [actionError, setActionError] = useState<string | null>(null);
+  const tickInFlight = useRef(false);
   const localParticipant: RoundParticipant | null =
     me && profile
       ? {
@@ -628,7 +629,12 @@ function LiveRoundRoom({
     )
       return;
     const interval = window.setInterval(() => {
-      if (Date.now() >= currentDeadline) void submitActionEvent("tick");
+      if (Date.now() >= currentDeadline && !tickInFlight.current) {
+        tickInFlight.current = true;
+        void submitActionEvent("tick").finally(() => {
+          tickInFlight.current = false;
+        });
+      }
     }, 1_000);
     return () => window.clearInterval(interval);
   }, [currentDeadline, currentPhase, submitActionEvent]);
