@@ -52,18 +52,20 @@ export async function POST(
   });
   if (error) {
     const safeCode = error.message.match(
-      /room-(full|started|expired|cancelled)/,
+      /room-(full|host-pending|started|expired|cancelled)/,
     )?.[1];
     const errorCode =
       safeCode === "full"
         ? "room-full"
-        : safeCode === "started"
-          ? "room-started"
-          : safeCode === "expired"
-            ? "room-expired"
-            : safeCode === "cancelled"
-              ? "room-cancelled"
-              : "room-unavailable";
+        : safeCode === "host-pending"
+          ? "room-host-pending"
+          : safeCode === "started"
+            ? "room-started"
+            : safeCode === "expired"
+              ? "room-expired"
+              : safeCode === "cancelled"
+                ? "room-cancelled"
+                : "room-unavailable";
     return NextResponse.json(roomError(errorCode), {
       status: errorCode === "room-unavailable" ? 503 : 400,
     });

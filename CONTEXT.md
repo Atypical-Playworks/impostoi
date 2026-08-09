@@ -42,6 +42,12 @@ impostoi is a Spanish-first realtime social game where people try to identify an
 
 **Late joiner**: A Participant who connects after a Portal room has already progressed beyond its initial state and receives the current state through a snapshot.
 
+**Seat reservation**: A temporary lobby admission held for one Guest session while Portal connection is being established.
+
+**Pending Player**: A Player with a Seat reservation whose Portal connection has not yet been confirmed.
+
+**Confirmed Player**: A Player whose Seat reservation has been confirmed after Portal reports a ready channel identity.
+
 ## Product rules
 
 - Each Match has 4 or 5 human Players and exactly one Agent.
@@ -65,5 +71,9 @@ impostoi is a Spanish-first realtime social game where people try to identify an
 - The lobby provides copy actions for the room code and `/room/{CODE}` invite link; neither contains tokens or persistent identity data.
 - The Host selects 4 or 5 human Players and confirms their Alias and avatar before server-side room reservation; these settings remain fixed for the Match.
 - A room at its configured human capacity rejects additional join attempts as full without creating a session or presence.
+- A lobby Seat reservation remains pending for 60 seconds and counts toward capacity; it becomes confirmed only after Portal reports a ready channel identity and the server confirms the same Guest session.
+- An expired Seat reservation is released and the Player may retry with the same Alias and avatar; the lobby displays pending Players as connecting.
+- The Host must be a Confirmed Player before additional Players may enter or the Match may start.
+- A reconnecting Guest session reclaims its existing pending or confirmed Seat reservation instead of creating a duplicate.
 - The Host may remove a Participant during the lobby; the server releases their seat and blocks that Guest session from rejoining the room. Removal is unavailable after the Match starts.
 - The lobby shows the current human count, configured capacity, and Agent readiness; starting is disabled below four human Players and available only to the Host.

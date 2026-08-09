@@ -9,6 +9,15 @@ type PublicRoom = {
   code: string;
   capacity: 4 | 5;
   humanCount: number;
+  confirmedCount: number;
+  pendingCount: number;
+  participants: {
+    id: string;
+    alias: string;
+    avatar: string;
+    status: "pending" | "confirmed";
+    isHost: boolean;
+  }[];
   status: "lobby" | "started" | "expired" | "cancelled";
   agentReady: boolean;
   isHost: boolean;
@@ -63,6 +72,25 @@ export default function RoomPage() {
       active = false;
     };
   }, [roomId]);
+
+  useEffect(() => {
+    if (!confirmed || room?.status !== "lobby") return;
+    let active = true;
+    const refresh = () => {
+      void fetch(`/api/rooms/${roomId}`, { cache: "no-store" })
+        .then(async (response) => {
+          if (!response.ok) return;
+          const next = (await response.json()) as PublicRoom;
+          if (active) setRoom(next);
+        })
+        .catch(() => undefined);
+    };
+    const interval = window.setInterval(refresh, 2_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [confirmed, room?.status, roomId]);
 
   if (error)
     return (
@@ -185,6 +213,17 @@ export default function RoomPage() {
         capacity: room?.capacity ?? 4,
         agentReady: room?.agentReady ?? false,
         isHost: room?.isHost ?? false,
+        confirmedCount: room?.confirmedCount ?? 0,
+        pendingCount: room?.pendingCount ?? 0,
+        pendingParticipants:
+          room?.participants
+            .filter((participant) => participant.status === "pending")
+            .map((participant) => ({
+              id: participant.id,
+              alias: participant.alias,
+              avatar: participant.avatar,
+              isHost: participant.isHost,
+            })) ?? [],
       }}
       onLeave={() => router.push("/")}
     />

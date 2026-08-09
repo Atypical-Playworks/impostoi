@@ -67,7 +67,7 @@ export async function POST(
   );
   let { data: participants, error: participantError } = await admin
     .from("room_participants")
-    .select("player_id, alias, avatar, is_host")
+    .select("player_id, alias, avatar, is_host, seat_status")
     .eq("room_code", code);
   if (!participants?.some((item) => item.player_id === user.id)) {
     const { data: room } = await admin
@@ -90,7 +90,7 @@ export async function POST(
       });
       const refreshed = await admin
         .from("room_participants")
-        .select("player_id, alias, avatar, is_host")
+        .select("player_id, alias, avatar, is_host, seat_status")
         .eq("room_code", code);
       participants = refreshed.data;
       participantError = refreshed.error;
@@ -119,13 +119,19 @@ export async function POST(
         return NextResponse.json(roomError("room-unavailable"), {
           status: 409,
         });
-      if (participants.length < 4)
+      const confirmedParticipants = participants.filter(
+        (item) => item.seat_status === "confirmed",
+      );
+      if (
+        confirmedParticipants.length < 4 ||
+        participant?.seat_status !== "confirmed"
+      )
         return NextResponse.json(roomError("room-full"), { status: 409 });
       state = createGame({
         matchId: randomUUID(),
         hostId: user.id,
         participants: [
-          ...participants.map((item) => ({
+          ...confirmedParticipants.map((item) => ({
             id: item.player_id,
             alias: item.alias,
             avatar: item.avatar,
@@ -202,10 +208,12 @@ export async function POST(
 
   await publishPrivateViews(
     code,
-    participants.map((item) => ({
-      userId: item.player_id,
-      content: { type: "state", view: viewFor(state, item.player_id) },
-    })),
+    participants
+      .filter((item) => item.seat_status === "confirmed")
+      .map((item) => ({
+        userId: item.player_id,
+        content: { type: "state", view: viewFor(state, item.player_id) },
+      })),
   );
   return NextResponse.json({ ok: true, view: publicViewFor(state) });
 }

@@ -29,6 +29,10 @@ export async function GET(
   });
   if (error || !data)
     return NextResponse.json(roomError("room-unavailable"), { status: 503 });
+  const { data: participantRows } = await admin
+    .from("room_participants")
+    .select("player_id, alias, avatar, is_host, seat_status")
+    .eq("room_code", code);
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -42,6 +46,21 @@ export async function GET(
     : { data: null };
   return NextResponse.json({
     ...data,
+    humanCount: participantRows?.length ?? data.humanCount,
+    confirmedCount:
+      participantRows?.filter((item) => item.seat_status === "confirmed")
+        .length ?? 0,
+    pendingCount:
+      participantRows?.filter((item) => item.seat_status === "pending")
+        .length ?? 0,
+    participants:
+      participantRows?.map((item) => ({
+        id: item.player_id,
+        alias: item.alias,
+        avatar: item.avatar,
+        status: item.seat_status,
+        isHost: item.is_host,
+      })) ?? [],
     isHost: user !== null && room?.host_player_id === user.id,
   });
 }

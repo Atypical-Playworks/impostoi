@@ -11,6 +11,15 @@ export type PublicRoom = {
   code: string;
   capacity: RoomCapacity;
   humanCount: number;
+  confirmedCount: number;
+  pendingCount: number;
+  participants: readonly {
+    id: string;
+    alias: string;
+    avatar: string;
+    status: "pending" | "confirmed";
+    isHost: boolean;
+  }[];
   status: RoomLifecycleStatus;
   agentReady: boolean;
 };
@@ -19,6 +28,7 @@ export type RoomErrorCode =
   | "invalid-room"
   | "room-unavailable"
   | "room-full"
+  | "room-host-pending"
   | "room-started"
   | "room-expired"
   | "room-cancelled"

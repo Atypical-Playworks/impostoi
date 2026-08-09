@@ -36,6 +36,7 @@ type RoundParticipant = {
   activity: "idle" | "clue" | "discussion" | "voting";
   isYou?: boolean;
   isHost?: boolean;
+  isPending?: boolean;
 };
 
 type PlayerProfile = { alias: string; avatar: string };
@@ -64,6 +65,14 @@ type LobbyConfig = {
   capacity: 4 | 5;
   agentReady: boolean;
   isHost: boolean;
+  confirmedCount: number;
+  pendingCount: number;
+  pendingParticipants: {
+    id: string;
+    alias: string;
+    avatar: string;
+    isHost: boolean;
+  }[];
 };
 
 type PublicRuntimeConfig = {
@@ -75,7 +84,14 @@ type PublicRuntimeConfig = {
 export function RoundRoom({
   onLeave,
   roomId,
-  lobbyConfig = { capacity: 4, agentReady: false, isHost: false },
+  lobbyConfig = {
+    capacity: 4,
+    agentReady: false,
+    isHost: false,
+    confirmedCount: 0,
+    pendingCount: 0,
+    pendingParticipants: [],
+  },
 }: {
   onLeave: () => void;
   roomId: string;
@@ -223,6 +239,8 @@ function LiveLobby({
   loading = false,
   timedOut = false,
   actionError = null,
+  confirmedCount = 0,
+  pendingCount = 0,
 }: {
   onLeave: () => void;
   onStart: () => void;
@@ -238,6 +256,8 @@ function LiveLobby({
   loading?: boolean;
   timedOut?: boolean;
   actionError?: string | null;
+  confirmedCount?: number;
+  pendingCount?: number;
 }) {
   const isPending = loading;
   const canStart = canStartLobby({
@@ -258,8 +278,8 @@ function LiveLobby({
         ? "Solo el anfitrion puede comenzar la ronda."
         : !agentReady
           ? "La IA aun no esta lista."
-          : participants.length < 4
-            ? `Faltan ${4 - participants.length} jugadores para comenzar.`
+          : confirmedCount < 4
+            ? `Faltan ${4 - confirmedCount} jugadores confirmados para comenzar.`
             : "Comparte el codigo para que tus amigos se unan.";
   return (
     <main className="round-shell">
@@ -344,7 +364,8 @@ function LiveLobby({
               <span className="skeleton-line participant-count-skeleton" />
             ) : (
               <span>
-                {participants.length}/{capacity}
+                {confirmedCount}/{capacity}
+                {pendingCount > 0 ? ` · ${pendingCount} conectando` : ""}
               </span>
             )}
           </div>
@@ -377,11 +398,13 @@ function LiveLobby({
                       </strong>
                       <small>
                         <i className={`activity-dot ${participant.activity}`} />
-                        {participant.isHost
-                          ? " Anfitrion"
-                          : participant.isYou
-                            ? " Tu"
-                            : " Conectado"}
+                        {participant.isPending
+                          ? " Conectando..."
+                          : participant.isHost
+                            ? " Anfitrion"
+                            : participant.isYou
+                              ? " Tu"
+                              : " Conectado"}
                       </small>
                     </div>
                   </div>
@@ -447,6 +470,7 @@ function LiveRoundRoom({
     Partial<Record<VotingStage, boolean>>
   >({});
   const [isHost, setIsHost] = useState(lobbyConfig.isHost);
+  const [admissionConfirmed, setAdmissionConfirmed] = useState(false);
   const [profile] = useState<PlayerProfile | null>(() => readPlayerProfile());
   const { messages, ext, me, presence, setMetadata, status } =
     useChannel<LiveMessage>({
@@ -472,6 +496,7 @@ function LiveRoundRoom({
           activity: "idle",
           isYou: true,
           isHost,
+          isPending: !admissionConfirmed,
         }
       : null;
   const hasPortalIdentity = localParticipant !== null;
@@ -505,6 +530,24 @@ function LiveRoundRoom({
   }, [channelId]);
 
   useEffect(() => {
+    if (status !== "ready" || !me || admissionConfirmed) return;
+    let active = true;
+    const confirm = () => {
+      void fetch(`/api/rooms/${channelId.replace(/^room-/, "")}/confirm`, {
+        method: "POST",
+      }).then((response) => {
+        if (active && response.ok) setAdmissionConfirmed(true);
+      });
+    };
+    confirm();
+    const interval = window.setInterval(confirm, 2_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [admissionConfirmed, channelId, me, status]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(interval);
   }, []);
@@ -515,6 +558,7 @@ function LiveRoundRoom({
         alias: profile.alias,
         avatar: profile.avatar,
         isHost,
+        admissionStatus: admissionConfirmed ? "confirmed" : "pending",
         activity:
           view?.phase === "clue_phase"
             ? "clue"
@@ -524,7 +568,7 @@ function LiveRoundRoom({
                 ? "voting"
                 : "idle",
       });
-  }, [isHost, me, profile, setMetadata, view?.phase]);
+  }, [admissionConfirmed, isHost, me, profile, setMetadata, view?.phase]);
 
   const submitAction = async (
     action: string,
@@ -566,6 +610,7 @@ function LiveRoundRoom({
                 ? metadata.activity
                 : "idle";
             const isHost = metadata.isHost === true;
+            const isPending = metadata.admissionStatus === "pending";
             return {
               id: participant.id,
               alias,
@@ -573,11 +618,22 @@ function LiveRoundRoom({
               activity,
               isYou: participant.id === me?.id,
               isHost,
+              isPending,
             };
           })
         : localParticipant
           ? [localParticipant]
           : [];
+    const connectedIds = new Set(connectedParticipants.map(({ id }) => id));
+    for (const participant of lobbyConfig.pendingParticipants) {
+      if (!connectedIds.has(participant.id)) {
+        connectedParticipants.push({
+          ...participant,
+          activity: "idle",
+          isPending: true,
+        });
+      }
+    }
     const currentHost = connectedParticipants.find(
       (participant) => participant.isHost,
     );
@@ -615,7 +671,7 @@ function LiveRoundRoom({
       );
     }
     const canStart = canStartLobby({
-      participantCount: connectedParticipants.length,
+      participantCount: lobbyConfig.confirmedCount,
       agentReady: lobbyConfig.agentReady,
       isHost,
     });

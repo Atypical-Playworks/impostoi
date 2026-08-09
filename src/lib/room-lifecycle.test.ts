@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   generateRoomCode,
   normalizeRoomCode,
+  roomError,
   roomErrorStatus,
   validateAlias,
   validateAvatar,
@@ -43,5 +44,8 @@ describe("server room lifecycle contract", () => {
     expect(roomErrorStatus("room-full")).toBe(400);
     expect(roomErrorStatus("session-expired")).toBe(401);
     expect(roomErrorStatus("room-unavailable")).toBe(503);
+    expect(roomError("room-host-pending")).toEqual({
+      error: "room-host-pending",
+    });
   });
 });
