@@ -14,8 +14,7 @@ import {
   Target,
   Users,
 } from "lucide-react";
-import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   MatchPhase,
   PrivateGameView,
@@ -240,7 +239,6 @@ function LiveLobby({
   roomCode,
   roomId,
   portalStatus = "connecting",
-  transferHost,
   capacity = 4,
   agentReady = false,
   isHost = false,
@@ -249,6 +247,7 @@ function LiveLobby({
   actionError = null,
   confirmedCount = 0,
   pendingCount = 0,
+  hostOnline = true,
 }: {
   onLeave: () => void;
   onStart: () => void;
@@ -257,7 +256,6 @@ function LiveLobby({
   roomCode: string | null;
   roomId: string;
   portalStatus?: string;
-  transferHost?: ReactNode;
   capacity?: 4 | 5;
   agentReady?: boolean;
   isHost?: boolean;
@@ -266,6 +264,7 @@ function LiveLobby({
   actionError?: string | null;
   confirmedCount?: number;
   pendingCount?: number;
+  hostOnline?: boolean;
 }) {
   const isPending = loading;
   const canStart = canStartLobby({
@@ -273,7 +272,7 @@ function LiveLobby({
     agentReady,
     isHost,
   });
-  const startDisabled = isPending || !canStart;
+  const startDisabled = isPending || !canStart || !hostOnline;
   const lobbyMessage = loading
     ? null
     : timedOut
@@ -282,16 +281,17 @@ function LiveLobby({
         : portalStatus === "ready"
           ? "Portal conecto, pero aun no entrego la lista de participantes."
           : `Portal esta en estado ${portalStatus}.`
-      : !isHost
-        ? "Solo el anfitrion puede comenzar la ronda."
-        : !agentReady
-          ? "La IA aun no esta lista."
-          : confirmedCount < 4
-            ? `Faltan ${4 - confirmedCount} jugadores confirmados para comenzar.`
-            : "Comparte el codigo para que tus amigos se unan.";
+      : !hostOnline
+        ? "El anfitrion esta reconectando. La ronda esta pausada."
+        : !isHost
+          ? "Solo el anfitrion puede comenzar la ronda."
+          : !agentReady
+            ? "La IA aun no esta lista."
+            : confirmedCount < 4
+              ? `Faltan ${4 - confirmedCount} jugadores confirmados para comenzar.`
+              : "Comparte el codigo para que tus amigos se unan.";
   return (
     <main className="round-shell">
-      {transferHost}
       <header className="round-header">
         <button type="button" className="back-button" onClick={onLeave}>
           <ChevronLeft size={18} /> Salir de la sala
@@ -431,32 +431,6 @@ function LiveLobby({
 type LiveMessage = {
   [key: string]: unknown;
 };
-
-function LobbyHostTransfer({
-  roomCode,
-  shouldTransfer,
-  onTransferred,
-}: {
-  roomCode: string;
-  shouldTransfer: boolean;
-  onTransferred: () => void;
-}) {
-  const transferStarted = useRef(false);
-  useEffect(() => {
-    if (!shouldTransfer) {
-      transferStarted.current = false;
-      return;
-    }
-    if (transferStarted.current) return;
-    transferStarted.current = true;
-    void fetch(`/api/rooms/${roomCode}/host`, {
-      method: "POST",
-    }).then((response) => {
-      if (response.ok) onTransferred();
-    });
-  }, [onTransferred, roomCode, shouldTransfer]);
-  return null;
-}
 
 function LiveRoundRoom({
   channelId,
@@ -659,10 +633,10 @@ function LiveRoundRoom({
               isPending,
             };
           });
-    const currentHost = connectedParticipants.find(
+    const hostId = lobbyConfig.serverParticipants.find(
       (participant) => participant.isHost,
-    );
-    const nextHost = connectedParticipants[0];
+    )?.id;
+    const hostOnline = hostId !== undefined && portalById.has(hostId);
     if (!hasPresenceSnapshot && !hasPortalIdentity && !lobbyTimedOut) {
       return (
         <LiveLobby
@@ -702,15 +676,6 @@ function LiveRoundRoom({
     });
     return (
       <LiveLobby
-        transferHost={
-          <LobbyHostTransfer
-            roomCode={channelId.replace(/^room-/, "")}
-            shouldTransfer={
-              hasPresenceSnapshot && !currentHost && nextHost?.id === me?.id
-            }
-            onTransferred={() => setIsHost(true)}
-          />
-        }
         onLeave={onLeave}
         onStart={() =>
           canStart &&
@@ -726,6 +691,7 @@ function LiveRoundRoom({
         {...lobbyConfig}
         isHost={isHost}
         actionError={actionError}
+        hostOnline={hostOnline}
       />
     );
   }
