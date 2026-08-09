@@ -94,6 +94,7 @@ export async function POST(
     isConfirmed = true;
   }
 
+  let view = null;
   if (isConfirmed) {
     const existing = await admin.rpc("read_live_match_state", {
       requested_code: code,
@@ -101,17 +102,23 @@ export async function POST(
     if (!existing.error && existing.data?.state) {
       try {
         const matchState = deserializeGameState(existing.data.state);
-        await publishPrivateViews(code, [
+        view = viewFor(matchState, user.id);
+        void publishPrivateViews(code, [
           {
             userId: user.id,
-            content: { type: "state", view: viewFor(matchState, user.id) },
+            content: { type: "state", view },
           },
-        ]);
+        ]).catch((err) => {
+          console.error(
+            "Failed background private view dispatch on confirm:",
+            err,
+          );
+        });
       } catch (err) {
         console.error("Failed to republish private views on confirm:", err);
       }
     }
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, view });
 }

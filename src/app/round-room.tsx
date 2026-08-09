@@ -35,6 +35,7 @@ type RoundParticipant = {
   isYou?: boolean;
   isHost?: boolean;
   isPending?: boolean;
+  realAlias?: string;
 };
 
 type PlayerProfile = { alias: string; avatar: string };
@@ -533,8 +534,16 @@ function LiveRoundRoom({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(profile ?? {}),
-      }).then((response) => {
-        if (active && response.ok) setAdmissionConfirmed(true);
+      }).then(async (response) => {
+        if (active && response.ok) {
+          setAdmissionConfirmed(true);
+          const result = (await response.json().catch(() => null)) as {
+            view?: PrivateGameView;
+          } | null;
+          if (result?.view) {
+            setLiveView(result.view);
+          }
+        }
       });
     };
     confirm();
@@ -716,11 +725,43 @@ function LiveRoundRoom({
   }
 
   const viewState = view; // We know it's not null here
-  const participants = viewState.participants.map((participant) => ({
-    ...participant,
-    activity: "idle" as const,
-    isYou: participant.id === me?.id,
-  }));
+  const isMaskedPhase =
+    viewState.phase === "clue_phase" || viewState.phase === "voting";
+
+  const participants = viewState.participants.map((participant, index) => {
+    const isYou = participant.id === me?.id;
+    return {
+      ...participant,
+      alias: isMaskedPhase
+        ? isYou
+          ? `${participant.alias} (tu)`
+          : `Jugador ${index + 1}`
+        : participant.alias,
+      avatar: isMaskedPhase
+        ? isYou
+          ? participant.avatar
+          : "#9CA3AF"
+        : participant.avatar,
+      realAlias: participant.alias,
+      activity: "idle" as const,
+      isYou,
+    };
+  });
+
+  const maskedClues = viewState.clues.map((c) => {
+    const pIndex = viewState.participants.findIndex((p) => p.alias === c.alias);
+    const p = viewState.participants[pIndex];
+    const isYou = p?.id === me?.id;
+    const displayName = isMaskedPhase
+      ? isYou
+        ? `${p.alias} (tu)`
+        : `Jugador ${pIndex + 1}`
+      : c.alias;
+    return {
+      alias: displayName,
+      text: c.text,
+    };
+  });
   const stage = viewState.votingStage ?? "ai_detection";
   const submit = async (content: Record<string, unknown>) => {
     const action = typeof content.action === "string" ? content.action : "";
@@ -799,7 +840,7 @@ function LiveRoundRoom({
           {view.phase === "clue_phase" ? (
             <CluePhase
               clue={draftClue}
-              clues={view.clues}
+              clues={maskedClues}
               activeTurnId={view.activeTurnId}
               participants={participants}
               myId={me?.id ?? ""}
