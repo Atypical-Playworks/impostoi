@@ -7,7 +7,8 @@ export type MatchPhase =
   | "clue_phase"
   | "voting"
   | "reveal"
-  | "results";
+  | "results"
+  | "match_over";
 
 export type VotingStage = "ai_detection" | "impostor";
 export type ParticipantKind = "player" | "agent";
@@ -317,6 +318,7 @@ export function advanceTimedOutPhase(
     case "lobby":
     case "reveal":
     case "results":
+    case "match_over":
       return state;
   }
 }
@@ -325,6 +327,53 @@ export function showResults(state: GameState, actorId: string): GameState {
   requireHost(state, actorId);
   requirePhase(state, "reveal");
   return copyState(state, { phase: "results", phaseDeadlineAt: undefined });
+}
+
+export function startNextRound(
+  state: GameState,
+  actorId: string,
+  category: string,
+  secretWord: string,
+  now = Date.now(),
+  random = Math.random,
+): GameState {
+  requireHost(state, actorId);
+  requirePhase(state, "results");
+  if (state.roundNumber >= MATCH_ROUNDS) {
+    throw new GameStateError("invalid-phase");
+  }
+
+  const randomValue = random();
+  if (!Number.isFinite(randomValue) || randomValue < 0 || randomValue >= 1) {
+    throw new GameStateError("invalid-random");
+  }
+  const impostor =
+    state.participants[Math.floor(randomValue * state.participants.length)];
+  if (!impostor) throw new GameStateError("invalid-random");
+
+  return copyState(state, {
+    roundNumber: state.roundNumber + 1,
+    phase: "clue_phase",
+    activeTurnId: state.participants[0]?.id,
+    phaseDeadlineAt: deadlineAfter(now, CLUE_PHASE_TIMEOUT_MS),
+    round: {
+      category,
+      secretWord,
+      agentId: state.round.agentId,
+      impostorId: impostor.id,
+      clues: new Map(),
+      votes: { ai_detection: new Map(), impostor: new Map() },
+    },
+  });
+}
+
+export function endMatch(state: GameState, actorId: string): GameState {
+  requireHost(state, actorId);
+  requirePhase(state, "results");
+  if (state.roundNumber < MATCH_ROUNDS) {
+    throw new GameStateError("invalid-phase");
+  }
+  return copyState(state, { phase: "match_over", phaseDeadlineAt: undefined });
 }
 
 export function viewFor(state: GameState, viewerId: string): PrivateGameView {
@@ -359,7 +408,10 @@ export function publicViewFor(state: GameState): PublicGameView {
       "",
     text,
   }));
-  const reveal = state.phase === "reveal" || state.phase === "results";
+  const reveal =
+    state.phase === "reveal" ||
+    state.phase === "results" ||
+    state.phase === "match_over";
   return {
     matchId: state.matchId,
     roundNumber: state.roundNumber,

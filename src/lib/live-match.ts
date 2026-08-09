@@ -10,7 +10,9 @@ export type LiveActionName =
   | "start_discussion"
   | "start_voting"
   | "submit_vote"
-  | "show_results";
+  | "show_results"
+  | "start_next_round"
+  | "end_match";
 
 export function canStartLobby(input: {
   participantCount: number;

@@ -827,7 +827,20 @@ function LiveRoundRoom({
               onResults={() => void submit(liveAction("show_results"))}
             />
           ) : null}
-          {view.phase === "results" ? <Results /> : null}
+          {view.phase === "results" ? (
+            <Results
+              roundNumber={view.roundNumber}
+              isHost={isHost}
+              onNext={() => {
+                if (view.roundNumber < 3) {
+                  void submit(liveAction("start_next_round"));
+                } else {
+                  void submit(liveAction("end_match"));
+                }
+              }}
+            />
+          ) : null}
+          {view.phase === "match_over" ? <MatchOver /> : null}
         </section>
         <aside className="round-sidebar">
           <div className="sidebar-heading">
@@ -987,7 +1000,13 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
               onResults={() => setPhase("results")}
             />
           ) : null}
-          {phase === "results" ? <Results /> : null}
+          {phase === "results" ? (
+            <Results
+              roundNumber={1}
+              isHost={true}
+              onNext={() => setPhase("lobby" as any)}
+            />
+          ) : null}
         </section>
 
         <aside className="round-sidebar">
@@ -1296,15 +1315,52 @@ function Reveal({
   );
 }
 
-function Results() {
+function Results({
+  roundNumber,
+  isHost,
+  onNext,
+}: {
+  roundNumber: number;
+  isHost: boolean;
+  onNext: () => void;
+}) {
+  const isFinalRound = roundNumber === 3;
   return (
     <div className="round-card reveal-card">
       <span className="big-round-icon yellow-icon">
         <Check size={32} />
       </span>
-      <p className="eyebrow">Ronda completada</p>
+      <p className="eyebrow">Ronda {roundNumber} completada</p>
       <h2>Buen ojo, equipo</h2>
-      <p>La siguiente ronda cambiara la palabra y los roles.</p>
+      <p>
+        {isFinalRound
+          ? "Todas las rondas de esta partida han finalizado."
+          : "La siguiente ronda cambiara la palabra y los roles."}
+      </p>
+      {isHost ? (
+        <button type="button" className="round-primary" onClick={onNext}>
+          {isFinalRound ? "Finalizar Partida" : "Siguiente Ronda"}{" "}
+          <Target size={19} />
+        </button>
+      ) : (
+        <div className="replay-summary">
+          <strong>Esperando al host</strong>
+          <span>El host iniciara la siguiente fase pronto.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MatchOver() {
+  return (
+    <div className="round-card reveal-card">
+      <span className="big-round-icon yellow-icon">
+        <Check size={32} />
+      </span>
+      <p className="eyebrow">Partida finalizada</p>
+      <h2>Partida guardada</h2>
+      <p>La partida ha sido guardada en tu historial.</p>
       <div className="replay-summary">
         <strong>Replay pendiente</strong>
         <span>

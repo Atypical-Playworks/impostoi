@@ -12,6 +12,8 @@ export function phaseTitle(phase: MatchPhase): string {
       return "La verdad sale a la luz";
     case "results":
       return "Resultados";
+    case "match_over":
+      return "Partida finalizada";
   }
 }
 
