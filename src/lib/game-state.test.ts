@@ -133,6 +133,7 @@ describe("server-authoritative game state", () => {
     for (let i = 0; i < 4; i++) {
       state = advanceTimedOutPhase(state, state.phaseDeadlineAt as number);
     }
+    expect(state.round.clues.get("p1")).toBe("vacío");
     expect(state.phase).toBe("clue_phase");
     expect(state.activeTurnId).toBe("agent"); // Last participant
 

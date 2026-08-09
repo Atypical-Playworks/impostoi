@@ -1,6 +1,6 @@
 export const MATCH_ROUNDS = 3;
-export const CLUE_PHASE_TIMEOUT_MS = 10_000;
-export const VOTING_TIMEOUT_MS = 20_000;
+export const CLUE_PHASE_TIMEOUT_MS = 15_000;
+export const VOTING_TIMEOUT_MS = 15_000;
 
 export type MatchPhase =
   | "lobby"
@@ -216,18 +216,25 @@ export function startCluePhase(
 }
 
 function advanceTurn(state: GameState, now: number): GameState {
+  const clues = new Map(state.round.clues);
+  if (state.activeTurnId && !clues.has(state.activeTurnId)) {
+    clues.set(state.activeTurnId, "vacío");
+  }
+  const withTimeoutClue = copyState(state, {
+    round: { ...state.round, clues },
+  });
   const currentIndex = state.participants.findIndex(
     (p) => p.id === state.activeTurnId,
   );
   if (currentIndex === -1 || currentIndex === state.participants.length - 1) {
-    return copyState(state, {
+    return copyState(withTimeoutClue, {
       phase: "voting",
       votingStage: "ai_detection",
       activeTurnId: undefined,
       phaseDeadlineAt: deadlineAfter(now, VOTING_TIMEOUT_MS),
     });
   }
-  return copyState(state, {
+  return copyState(withTimeoutClue, {
     activeTurnId: state.participants[currentIndex + 1].id,
     phaseDeadlineAt: deadlineAfter(now, CLUE_PHASE_TIMEOUT_MS),
   });

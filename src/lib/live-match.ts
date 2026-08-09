@@ -5,6 +5,7 @@ export type LiveMatchEvent =
   | { type: "state"; view: PrivateGameView };
 
 export type LiveActionName =
+  | "tick"
   | "submit_clue"
   | "start_clue_phase"
   | "start_discussion"

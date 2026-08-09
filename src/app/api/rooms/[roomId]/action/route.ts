@@ -136,6 +136,7 @@ export async function POST(
   let state = existing.data?.state
     ? deserializeGameState(existing.data.state)
     : null;
+  const activeTurnBeforeAction = state?.activeTurnId;
   try {
     if (!state) {
       if (action !== "start_clue_phase" || participant?.is_host !== true)
@@ -173,6 +174,8 @@ export async function POST(
     }
 
     switch (action as LiveActionName) {
+      case "tick":
+        break;
       case "start_clue_phase":
         state = startCluePhase(state, user.id);
         break;
@@ -218,7 +221,8 @@ export async function POST(
     const nonNullState = state;
     if (
       nonNullState.phase === "clue_phase" &&
-      nonNullState.activeTurnId === "agent"
+      nonNullState.activeTurnId === "agent" &&
+      activeTurnBeforeAction !== "agent"
     ) {
       const config = readServerRuntimeConfig();
       const adapter = createAgentAdapter({

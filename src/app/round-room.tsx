@@ -13,7 +13,7 @@ import {
   Target,
   Users,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import type {
   MatchPhase,
   PrivateGameView,
@@ -611,6 +611,22 @@ function LiveRoundRoom({
       setLiveView(result.view);
     }
   };
+  const submitActionEvent = useEffectEvent(submitAction);
+  const currentPhase = view?.phase;
+  const currentDeadline = view?.phaseDeadlineAt;
+
+  useEffect(() => {
+    if (
+      currentPhase === undefined ||
+      currentPhase === "lobby" ||
+      currentDeadline === undefined
+    )
+      return;
+    const interval = window.setInterval(() => {
+      if (Date.now() >= currentDeadline) void submitActionEvent("tick");
+    }, 1_000);
+    return () => window.clearInterval(interval);
+  }, [currentDeadline, currentPhase, submitActionEvent]);
 
   if (!view) {
     const portalParticipants =
