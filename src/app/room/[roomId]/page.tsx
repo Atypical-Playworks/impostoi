@@ -58,13 +58,15 @@ export default function RoomPage() {
   const router = useRouter();
   const roomId = params.roomId?.toUpperCase() ?? "";
   const [room, setRoom] = useState<PublicRoom | null>(null);
-  const [profile, setProfile] = useState<JoinProfile | null>(() =>
-    readStoredProfile(),
-  );
+  const [profile, setProfile] = useState<JoinProfile | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const aliasId = useId();
+
+  useEffect(() => {
+    setProfile(readStoredProfile());
+  }, []);
 
   useEffect(() => {
     if (!roomId) return;

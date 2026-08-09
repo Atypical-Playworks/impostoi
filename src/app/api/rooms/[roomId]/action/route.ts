@@ -336,16 +336,19 @@ export async function POST(
   if (saveError)
     return NextResponse.json(roomError("room-unavailable"), { status: 503 });
 
-  void publishPrivateViews(
-    code,
-    participants
-      .filter((item) => item.seat_status === "confirmed")
-      .map((item) => ({
-        userId: item.player_id,
-        content: { type: "state", view: viewFor(state, item.player_id) },
-      })),
-  ).catch((err) => {
-    console.error("Failed background private view dispatch:", err);
-  });
+  try {
+    await publishPrivateViews(
+      code,
+      participants
+        .filter((item) => item.seat_status === "confirmed")
+        .map((item) => ({
+          userId: item.player_id,
+          content: { type: "state", view: viewFor(state, item.player_id) },
+        })),
+    );
+  } catch (err) {
+    console.error("Failed private view dispatch:", err);
+    return NextResponse.json(roomError("room-unavailable"), { status: 503 });
+  }
   return NextResponse.json({ ok: true, view: viewFor(state, user.id) });
 }

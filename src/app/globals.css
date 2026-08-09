@@ -1366,6 +1366,28 @@ button {
   gap: 9px;
   color: var(--pink);
 }
+.turn-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid #6d34c6;
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+.turn-status.current {
+  border-color: var(--cyan);
+  background: rgba(33, 212, 212, 0.1);
+  color: var(--cyan);
+}
+.turn-status span {
+  color: var(--yellow);
+  font-weight: 800;
+}
 .card-title h2,
 .discussion-card h2,
 .vote-card h2 {

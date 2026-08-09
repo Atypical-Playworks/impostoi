@@ -858,6 +858,11 @@ function LiveRoundRoom({
               clue={draftClue}
               clues={maskedClues}
               activeTurnId={view.activeTurnId}
+              secondsRemaining={
+                view.phaseDeadlineAt
+                  ? Math.max(0, Math.ceil((view.phaseDeadlineAt - now) / 1000))
+                  : 0
+              }
               participants={participants}
               myId={me?.id ?? ""}
               submittedClue={sentClue}
@@ -1005,6 +1010,7 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
               clue={clue}
               clues={clues}
               activeTurnId={"demo-1"}
+              secondsRemaining={20}
               participants={[
                 {
                   id: "demo-1",
@@ -1110,6 +1116,7 @@ function CluePhase({
   clue,
   clues,
   activeTurnId,
+  secondsRemaining,
   participants,
   myId,
   submittedClue,
@@ -1121,6 +1128,7 @@ function CluePhase({
   clue: string;
   clues: readonly { alias: string; text: string }[];
   activeTurnId?: string;
+  secondsRemaining: number;
   participants: readonly RoundParticipant[];
   myId: string;
   submittedClue: string | null;
@@ -1162,6 +1170,10 @@ function CluePhase({
         </ul>
       </div>
       <div className="round-card clue-card">
+        <div className={`turn-status${isMyTurn ? " current" : ""}`}>
+          <strong>{isMyTurn ? "TU TURNO" : "TURNO DEL JUGADOR"}</strong>
+          <span>{secondsRemaining}s restantes</span>
+        </div>
         <div className="card-title">
           <MessageCircle size={21} />
           <h2>
