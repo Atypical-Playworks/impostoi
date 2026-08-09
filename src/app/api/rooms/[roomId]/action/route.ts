@@ -168,6 +168,9 @@ export async function POST(
         secretWord: pick.word,
         agentId: "agent",
       });
+    } else if (action === "start_clue_phase" && state.phase !== "lobby") {
+      // Already started — idempotent: just broadcast current state.
+      return NextResponse.json({ ok: true, view: publicViewFor(state) });
     }
 
     switch (action as LiveActionName) {
@@ -301,8 +304,12 @@ export async function POST(
         }
       }
     }
-  } catch (_err) {
-    console.error("Action Error:", _err);
+  } catch (err) {
+    if (err instanceof Error) {
+      console.error("Action Error:", err.message, err.stack);
+    } else {
+      console.error("Action Error (unknown):", err);
+    }
     return NextResponse.json(roomError("room-unavailable"), { status: 409 });
   }
 
