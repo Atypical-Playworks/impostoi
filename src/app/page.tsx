@@ -126,13 +126,36 @@ function CreateRoomModal({
   onEnter: (roomId: string) => void;
 }) {
   const [created, setCreated] = useState(false);
-  const [code] = useState("IMPOST");
+  const [code, setCode] = useState("");
+  const [capacity, setCapacity] = useState<4 | 5>(4);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function copyCode() {
     await navigator.clipboard?.writeText(code);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  async function createRoom() {
+    setError(null);
+    const guest = await fetch("/api/auth/guest", { method: "POST" });
+    if (!guest.ok) {
+      setError("No se pudo iniciar la sesion.");
+      return;
+    }
+    const response = await fetch("/api/rooms", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ capacity, alias: "Gato Ninja", avatar: "#21D4D4" }),
+    });
+    const payload = (await response.json()) as { code?: string };
+    if (!response.ok || !payload.code) {
+      setError("No se pudo crear la sala.");
+      return;
+    }
+    setCode(payload.code);
+    setCreated(true);
   }
 
   return (
@@ -157,12 +180,12 @@ function CreateRoomModal({
           <div className="modal-choice-row">
             <span className="modal-label">Jugadores humanos</span>
             <div className="choice-group">
-              <button type="button" className="choice active">
-                4
-              </button>
-              <button type="button" className="choice">
-                5
-              </button>
+                <button type="button" className={capacity === 4 ? "choice active" : "choice"} onClick={() => setCapacity(4)}>
+                  4
+                </button>
+                <button type="button" className={capacity === 5 ? "choice active" : "choice"} onClick={() => setCapacity(5)}>
+                  5
+                </button>
             </div>
           </div>
           <div className="modal-note">
@@ -172,11 +195,12 @@ function CreateRoomModal({
           <button
             type="button"
             className="modal-primary"
-            onClick={() => setCreated(true)}
+            onClick={() => void createRoom()}
           >
             <Play size={20} fill="currentColor" />
             Crear sala ahora
           </button>
+          {error ? <p role="alert">{error}</p> : null}
         </div>
       ) : (
         <div className="modal-success">
@@ -206,8 +230,7 @@ function JoinRoomModal({
   onClose: () => void;
   onEnter: (roomId: string) => void;
 }) {
-  const [code, setCode] = useState("IMPOST");
-  const [joined, setJoined] = useState(false);
+  const [code, setCode] = useState("");
   const [avatar, setAvatar] = useState(palette[0]);
   const roomCodeId = useId();
 
@@ -218,8 +241,7 @@ function JoinRoomModal({
       icon={<Users />}
       accent="#21D4D4"
     >
-      {!joined ? (
-        <div className="modal-stack">
+      <div className="modal-stack">
           <label className="modal-label" htmlFor={roomCodeId}>
             Codigo de sala
           </label>
@@ -263,30 +285,19 @@ function JoinRoomModal({
           <button
             type="button"
             className="modal-primary cyan"
-            onClick={() => setJoined(true)}
+            disabled={code.length !== 6}
+            onClick={() => {
+              sessionStorage.setItem(
+                "impostoi_join_profile",
+                JSON.stringify({ alias: "Gato Ninja", avatar }),
+              );
+              onEnter(code);
+            }}
           >
             <LogIn size={20} />
             Entrar a la sala
           </button>
-        </div>
-      ) : (
-        <div className="modal-success">
-          <div className="success-avatar">
-            <Avatar color={avatar} label="?" className="success-avatar-dot" />
-          </div>
-          <h3>Te has unido</h3>
-          <p>
-            Estas dentro como <strong>Gato Ninja</strong>.
-          </p>
-          <button
-            type="button"
-            className="modal-primary cyan"
-            onClick={() => onEnter(code)}
-          >
-            Ir a la sala de espera
-          </button>
-        </div>
-      )}
+      </div>
     </Modal>
   );
 }
