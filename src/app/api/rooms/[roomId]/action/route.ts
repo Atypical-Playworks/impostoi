@@ -209,21 +209,17 @@ export async function POST(
       return NextResponse.json(roomError("room-unavailable"), { status: 409 });
 
     state = advanceTimedOutPhase(state);
-
-    const config = readServerRuntimeConfig();
     if (!state) {
       return NextResponse.json(roomError("room-unavailable"), { status: 409 });
     }
-    const adapter = createAgentAdapter({
-      apiKey: config.opencodeZenApiKey,
-      baseUrl: config.opencodeZenBaseUrl,
-    });
 
-    if (
-      state &&
-      state.phase === "clue_phase" &&
-      state.activeTurnId === "agent"
-    ) {
+    if (state.phase === "clue_phase" && state.activeTurnId === "agent") {
+      const config = readServerRuntimeConfig();
+      const adapter = createAgentAdapter({
+        apiKey: config.opencodeZenApiKey,
+        baseUrl: config.opencodeZenBaseUrl,
+      });
+
       const publicClues = [...state.round.clues.entries()].map(
         ([id, text]) => ({
           alias: state.participants.find((p) => p.id === id)?.alias ?? id,
@@ -248,10 +244,16 @@ export async function POST(
       } else {
         state = submitClue(state, "agent", "naturaleza");
       }
-    } else if (state && state.phase === "voting") {
+    } else if (state.phase === "voting") {
       const currentVotes =
         state.round.votes[state.votingStage ?? "ai_detection"];
       if (!currentVotes.has("agent")) {
+        const config = readServerRuntimeConfig();
+        const adapter = createAgentAdapter({
+          apiKey: config.opencodeZenApiKey,
+          baseUrl: config.opencodeZenBaseUrl,
+        });
+
         const publicClues = [...state.round.clues.entries()].map(
           ([id, text]) => ({
             alias: state.participants.find((p) => p.id === id)?.alias ?? id,
@@ -294,6 +296,7 @@ export async function POST(
       }
     }
   } catch (_err) {
+    console.error("Action Error:", _err);
     return NextResponse.json(roomError("room-unavailable"), { status: 409 });
   }
 
