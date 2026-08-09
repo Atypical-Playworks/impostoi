@@ -15,7 +15,7 @@ import {
   Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   MatchPhase,
   PrivateGameView,
@@ -397,18 +397,26 @@ type LiveMessage = {
 function LobbyHostTransfer({
   roomCode,
   shouldTransfer,
+  onTransferred,
 }: {
   roomCode: string;
   shouldTransfer: boolean;
+  onTransferred: () => void;
 }) {
+  const transferStarted = useRef(false);
   useEffect(() => {
-    if (!shouldTransfer) return;
+    if (!shouldTransfer) {
+      transferStarted.current = false;
+      return;
+    }
+    if (transferStarted.current) return;
+    transferStarted.current = true;
     void fetch(`/api/rooms/${roomCode}/host`, {
       method: "POST",
     }).then((response) => {
-      if (response.ok) window.location.reload();
+      if (response.ok) onTransferred();
     });
-  }, [roomCode, shouldTransfer]);
+  }, [onTransferred, roomCode, shouldTransfer]);
   return null;
 }
 
@@ -431,13 +439,12 @@ function LiveRoundRoom({
   const [sentVotes, setSentVotes] = useState<
     Partial<Record<VotingStage, boolean>>
   >({});
+  const [isHost, setIsHost] = useState(lobbyConfig.isHost);
   const [profile] = useState<PlayerProfile | null>(() => readPlayerProfile());
   const { messages, ext, me, presence, send, setMetadata, status } =
     useChannel<LiveMessage>({
       channelId,
-      metadata: profile
-        ? { ...profile, activity: "idle", isHost: lobbyConfig.isHost }
-        : {},
+      metadata: profile ? { ...profile, activity: "idle", isHost } : {},
     });
 
   let view: PrivateGameView | null = readLiveMatchView(ext?.match);
@@ -456,7 +463,7 @@ function LiveRoundRoom({
           avatar: profile.avatar,
           activity: "idle",
           isYou: true,
-          isHost: lobbyConfig.isHost,
+          isHost,
         }
       : null;
   const hasPortalIdentity = localParticipant !== null;
@@ -481,7 +488,7 @@ function LiveRoundRoom({
       setMetadata({
         alias: profile.alias,
         avatar: profile.avatar,
-        isHost: lobbyConfig.isHost,
+        isHost,
         activity:
           view?.phase === "clue_phase"
             ? "clue"
@@ -491,7 +498,7 @@ function LiveRoundRoom({
                 ? "voting"
                 : "idle",
       });
-  }, [lobbyConfig.isHost, me, profile, setMetadata, view?.phase]);
+  }, [isHost, me, profile, setMetadata, view?.phase]);
 
   if (!view) {
     const connectedParticipants: RoundParticipant[] =
@@ -560,7 +567,7 @@ function LiveRoundRoom({
     const canStart = canStartLobby({
       participantCount: connectedParticipants.length,
       agentReady: lobbyConfig.agentReady,
-      isHost: lobbyConfig.isHost,
+      isHost,
     });
     return (
       <LiveLobby
@@ -570,6 +577,7 @@ function LiveRoundRoom({
             shouldTransfer={
               hasPresenceSnapshot && !currentHost && nextHost?.id === me?.id
             }
+            onTransferred={() => setIsHost(true)}
           />
         }
         onLeave={onLeave}
@@ -586,6 +594,7 @@ function LiveRoundRoom({
         roomId={channelId.replace(/^room-/, "")}
         portalStatus={status}
         {...lobbyConfig}
+        isHost={isHost}
       />
     );
   }
@@ -649,7 +658,7 @@ function LiveRoundRoom({
                 canStartLobby({
                   participantCount: participants.length,
                   agentReady: lobbyConfig.agentReady,
-                  isHost: lobbyConfig.isHost,
+                  isHost,
                 })
                   ? void submit(liveAction("start_clue_phase"))
                   : undefined
@@ -660,7 +669,7 @@ function LiveRoundRoom({
               portalStatus={status}
               capacity={lobbyConfig.capacity}
               agentReady={lobbyConfig.agentReady}
-              isHost={lobbyConfig.isHost}
+              isHost={isHost}
             />
           ) : null}
           {view.phase === "clue_phase" ? (
