@@ -302,8 +302,18 @@ function JoinRoomModal({
           className="room-input"
           value={code}
           maxLength={6}
-          onChange={(event) => setCode(event.target.value.toUpperCase())}
+          onChange={(event) =>
+            setCode(
+              event.target.value
+                .replace(/[^a-zA-Z0-9]/g, "")
+                .toUpperCase()
+                .slice(0, 6),
+            )
+          }
         />
+        <small className="room-code-hint">
+          Usa el codigo de 6 caracteres que comparte el anfitrion.
+        </small>
         <div className="alias-box">
           <label className="modal-label" htmlFor={aliasId}>
             Tu alias para esta partida
