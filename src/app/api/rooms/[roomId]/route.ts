@@ -21,6 +21,9 @@ export async function GET(
   const admin = createSupabaseAdminClient(
     readServerRuntimeConfig().supabaseSecretKey,
   );
+  await admin.rpc("cleanup_stale_room_participants", {
+    requested_code: code,
+  });
   const { data, error } = await admin.rpc("get_public_room", {
     requested_code: code,
   });

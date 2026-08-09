@@ -222,6 +222,7 @@ function LiveLobby({
   isHost = false,
   loading = false,
   timedOut = false,
+  actionError = null,
 }: {
   onLeave: () => void;
   onStart: () => void;
@@ -236,6 +237,7 @@ function LiveLobby({
   isHost?: boolean;
   loading?: boolean;
   timedOut?: boolean;
+  actionError?: string | null;
 }) {
   const isPending = loading;
   const canStart = canStartLobby({
@@ -314,7 +316,12 @@ function LiveLobby({
                 {loading ? (
                   <span className="skeleton-line lobby-title-skeleton" />
                 ) : (
-                  <p>{lobbyMessage}</p>
+                  <>
+                    <p>{actionError ?? lobbyMessage}</p>
+                    {actionError ? (
+                      <p role="alert">Revisa la conexion e intenta de nuevo.</p>
+                    ) : null}
+                  </>
                 )}
                 <button
                   type="button"
@@ -441,7 +448,7 @@ function LiveRoundRoom({
   >({});
   const [isHost, setIsHost] = useState(lobbyConfig.isHost);
   const [profile] = useState<PlayerProfile | null>(() => readPlayerProfile());
-  const { messages, ext, me, presence, send, setMetadata, status } =
+  const { messages, ext, me, presence, setMetadata, status } =
     useChannel<LiveMessage>({
       channelId,
       metadata: profile ? { ...profile, activity: "idle", isHost } : {},
@@ -455,6 +462,7 @@ function LiveRoundRoom({
 
   const hasMatchView = view !== null;
   const hasPresenceSnapshot = presence?.kind === "detailed";
+  const [actionError, setActionError] = useState<string | null>(null);
   const localParticipant: RoundParticipant | null =
     me && profile
       ? {
@@ -486,7 +494,14 @@ function LiveRoundRoom({
     };
     heartbeat();
     const interval = window.setInterval(heartbeat, 10_000);
-    return () => window.clearInterval(interval);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") heartbeat();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [channelId]);
 
   useEffect(() => {
@@ -510,6 +525,28 @@ function LiveRoundRoom({
                 : "idle",
       });
   }, [isHost, me, profile, setMetadata, view?.phase]);
+
+  const submitAction = async (
+    action: string,
+    payload: Record<string, unknown> = {},
+  ) => {
+    setActionError(null);
+    const response = await fetch(
+      `/api/rooms/${channelId.replace(/^room-/, "")}/action`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, ...payload }),
+      },
+    );
+    if (!response.ok) {
+      const result = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      setActionError(result?.error ?? "No se pudo procesar la accion.");
+      return;
+    }
+  };
 
   if (!view) {
     const connectedParticipants: RoundParticipant[] =
@@ -557,6 +594,7 @@ function LiveRoundRoom({
           roomId={channelId.replace(/^room-/, "")}
           {...lobbyConfig}
           portalStatus={status}
+          actionError={actionError}
         />
       );
     }
@@ -572,6 +610,7 @@ function LiveRoundRoom({
           timedOut
           {...lobbyConfig}
           portalStatus={status}
+          actionError={actionError}
         />
       );
     }
@@ -592,20 +631,14 @@ function LiveRoundRoom({
           />
         }
         onLeave={onLeave}
-        onStart={() =>
-          canStart
-            ? void send({
-                content: liveAction("start_clue_phase"),
-                type: "match_action",
-              })
-            : undefined
-        }
+        onStart={() => canStart && void submitAction("start_clue_phase")}
         participants={connectedParticipants}
         roomCode={channelId.replace(/^room-/, "")}
         roomId={channelId.replace(/^room-/, "")}
         portalStatus={status}
         {...lobbyConfig}
         isHost={isHost}
+        actionError={actionError}
       />
     );
   }
@@ -617,7 +650,8 @@ function LiveRoundRoom({
   }));
   const stage = view.votingStage ?? "ai_detection";
   const submit = async (content: Record<string, unknown>) => {
-    await send({ content, type: "match_action" });
+    const action = typeof content.action === "string" ? content.action : "";
+    await submitAction(action, content);
   };
   const submitClue = async () => {
     const text = draftClue.trim();
@@ -681,6 +715,7 @@ function LiveRoundRoom({
               capacity={lobbyConfig.capacity}
               agentReady={lobbyConfig.agentReady}
               isHost={isHost}
+              actionError={actionError}
             />
           ) : null}
           {view.phase === "clue_phase" ? (
