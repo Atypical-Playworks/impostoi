@@ -29,20 +29,16 @@ export async function GET(
   });
   if (error || !data)
     return NextResponse.json(roomError("room-unavailable"), { status: 503 });
-  const { data: participantRows } = await admin
-    .from("room_participants")
-    .select("player_id, alias, avatar, is_host, seat_status")
-    .eq("room_code", code);
+  const { data: participantData } = await admin.rpc("get_room_participants", {
+    requested_code: code,
+  });
+  const participantRows = Array.isArray(participantData) ? participantData : [];
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const { data: room } = user
-    ? await admin
-        .from("rooms")
-        .select("host_player_id")
-        .eq("code", code)
-        .maybeSingle()
+  const { data: hostId } = user
+    ? await admin.rpc("get_room_host", { requested_code: code })
     : { data: null };
   return NextResponse.json({
     ...data,
@@ -61,6 +57,6 @@ export async function GET(
         status: item.seat_status,
         isHost: item.is_host,
       })) ?? [],
-    isHost: user !== null && room?.host_player_id === user.id,
+    isHost: user !== null && hostId === user.id,
   });
 }

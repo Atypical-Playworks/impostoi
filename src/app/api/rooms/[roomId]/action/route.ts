@@ -41,6 +41,14 @@ type ActionBody = {
   targetId?: string;
 };
 
+type RoomParticipantRow = {
+  player_id: string;
+  alias: string;
+  avatar: string;
+  is_host: boolean;
+  seat_status: "pending" | "confirmed";
+};
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ roomId: string }> },
@@ -65,34 +73,35 @@ export async function POST(
   const admin = createSupabaseAdminClient(
     readServerRuntimeConfig().supabaseSecretKey,
   );
-  let { data: participants, error: participantError } = await admin
-    .from("room_participants")
-    .select("player_id, alias, avatar, is_host, seat_status")
-    .eq("room_code", code);
+  let { data: participantData, error: participantError } = await admin.rpc(
+    "get_room_participants",
+    { requested_code: code },
+  );
+  let participants = Array.isArray(participantData)
+    ? (participantData as RoomParticipantRow[])
+    : [];
   if (!participants?.some((item) => item.player_id === user.id)) {
-    const { data: room } = await admin
-      .from("rooms")
-      .select("host_player_id, status")
-      .eq("code", code)
-      .maybeSingle();
+    const { data: hostId } = await admin.rpc("get_room_host", {
+      requested_code: code,
+    });
     if (
-      room?.host_player_id === user.id &&
-      room.status === "lobby" &&
+      hostId === user.id &&
       validateAlias(body.alias) &&
       validateAvatar(body.avatar)
     ) {
-      await admin.from("room_participants").upsert({
-        room_code: code,
-        player_id: user.id,
-        alias: body.alias.trim(),
-        avatar: body.avatar.trim(),
-        is_host: true,
+      await admin.rpc("restore_lobby_host", {
+        requested_code: code,
+        requested_player_id: user.id,
+        requested_alias: body.alias.trim(),
+        requested_avatar: body.avatar.trim(),
       });
-      const refreshed = await admin
-        .from("room_participants")
-        .select("player_id, alias, avatar, is_host, seat_status")
-        .eq("room_code", code);
-      participants = refreshed.data;
+      const refreshed = await admin.rpc("get_room_participants", {
+        requested_code: code,
+      });
+      participantData = refreshed.data;
+      participants = Array.isArray(participantData)
+        ? (participantData as RoomParticipantRow[])
+        : [];
       participantError = refreshed.error;
     }
   }
@@ -104,11 +113,11 @@ export async function POST(
 
   const participant = participants.find((item) => item.player_id === user.id);
   const action = body.action;
-  const existing = await admin
-    .from("live_match_states")
-    .select("match_id, state")
-    .eq("room_code", code)
-    .maybeSingle();
+  const existing = await admin.rpc("read_live_match_state", {
+    requested_code: code,
+  });
+  if (existing.error)
+    return NextResponse.json(roomError("room-unavailable"), { status: 503 });
 
   let state = existing.data?.state
     ? deserializeGameState(existing.data.state)
@@ -187,21 +196,18 @@ export async function POST(
 
   const serialized = serializeGameState(state);
   if (!existing.data) {
-    const { error: roomUpdateError } = await admin
-      .from("rooms")
-      .update({ status: "started" })
-      .eq("code", code)
-      .eq("status", "lobby");
+    const { error: roomUpdateError } = await admin.rpc("mark_room_started", {
+      requested_code: code,
+    });
     if (roomUpdateError)
       return NextResponse.json(roomError("room-unavailable"), {
         status: 503,
       });
   }
-  const { error: saveError } = await admin.from("live_match_states").upsert({
-    room_code: code,
-    match_id: state.matchId,
-    state: serialized,
-    updated_at: new Date().toISOString(),
+  const { error: saveError } = await admin.rpc("write_live_match_state", {
+    requested_code: code,
+    requested_match_id: state.matchId,
+    requested_state: serialized,
   });
   if (saveError)
     return NextResponse.json(roomError("room-unavailable"), { status: 503 });

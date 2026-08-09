@@ -27,14 +27,15 @@ export async function POST(
   const admin = createSupabaseAdminClient(
     readServerRuntimeConfig().supabaseSecretKey,
   );
-  const { data: participant, error: participantError } = await admin
-    .from("room_participants")
-    .select("seat_status, reservation_expires_at")
-    .eq("room_code", code)
-    .eq("player_id", user.id)
-    .maybeSingle();
+  const { data: participantData, error: participantError } = await admin.rpc(
+    "get_room_participants",
+    { requested_code: code },
+  );
   if (participantError)
     return NextResponse.json(roomError("room-unavailable"), { status: 503 });
+  const participant = Array.isArray(participantData)
+    ? participantData.find((item) => item.player_id === user.id)
+    : null;
   if (participant?.seat_status === "confirmed")
     return NextResponse.json({ ok: true });
   const { data: confirmed, error } = await admin.rpc(
