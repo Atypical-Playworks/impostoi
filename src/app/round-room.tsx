@@ -631,7 +631,13 @@ function LiveRoundRoom({
           />
         }
         onLeave={onLeave}
-        onStart={() => canStart && void submitAction("start_clue_phase")}
+        onStart={() =>
+          canStart &&
+          void submitAction(
+            "start_clue_phase",
+            profile ? { alias: profile.alias, avatar: profile.avatar } : {},
+          )
+        }
         participants={connectedParticipants}
         roomCode={channelId.replace(/^room-/, "")}
         roomId={channelId.replace(/^room-/, "")}
@@ -651,7 +657,12 @@ function LiveRoundRoom({
   const stage = view.votingStage ?? "ai_detection";
   const submit = async (content: Record<string, unknown>) => {
     const action = typeof content.action === "string" ? content.action : "";
-    await submitAction(action, content);
+    await submitAction(
+      action,
+      action === "start_clue_phase" && profile
+        ? { ...content, alias: profile.alias, avatar: profile.avatar }
+        : content,
+    );
   };
   const submitClue = async () => {
     const text = draftClue.trim();

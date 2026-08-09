@@ -21,6 +21,8 @@ import { publishPrivateViews } from "@/lib/portal-server";
 import {
   normalizeRoomCode,
   roomError,
+  validateAlias,
+  validateAvatar,
   validateRoomCode,
 } from "@/lib/room-lifecycle";
 import { readServerRuntimeConfig } from "@/lib/server-env-config";
@@ -31,6 +33,8 @@ import {
 
 type ActionBody = {
   action?: string;
+  alias?: string;
+  avatar?: string;
   text?: string;
   discussion?: string;
   stage?: "ai_detection" | "impostor";
@@ -61,10 +65,37 @@ export async function POST(
   const admin = createSupabaseAdminClient(
     readServerRuntimeConfig().supabaseSecretKey,
   );
-  const { data: participants, error: participantError } = await admin
+  let { data: participants, error: participantError } = await admin
     .from("room_participants")
     .select("player_id, alias, avatar, is_host")
     .eq("room_code", code);
+  if (!participants?.some((item) => item.player_id === user.id)) {
+    const { data: room } = await admin
+      .from("rooms")
+      .select("host_player_id, status")
+      .eq("code", code)
+      .maybeSingle();
+    if (
+      room?.host_player_id === user.id &&
+      room.status === "lobby" &&
+      validateAlias(body.alias) &&
+      validateAvatar(body.avatar)
+    ) {
+      await admin.from("room_participants").upsert({
+        room_code: code,
+        player_id: user.id,
+        alias: body.alias.trim(),
+        avatar: body.avatar.trim(),
+        is_host: true,
+      });
+      const refreshed = await admin
+        .from("room_participants")
+        .select("player_id, alias, avatar, is_host")
+        .eq("room_code", code);
+      participants = refreshed.data;
+      participantError = refreshed.error;
+    }
+  }
   if (
     participantError ||
     !participants?.some((item) => item.player_id === user.id)
