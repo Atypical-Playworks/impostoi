@@ -118,7 +118,10 @@ export function RoundRoom({
         if (active) {
           setSetup({
             status: "ready",
-            client: new Portal({ apiKey: config.portalKey }),
+            client: new Portal({
+              apiKey: config.portalKey,
+              token: payload.token,
+            }),
             token: payload.token,
           });
         }
