@@ -25,6 +25,20 @@ type PublicRoom = {
 type JoinProfile = { alias: string; avatar: string };
 const avatarOptions = ["#21D4D4", "#F43FA7", "#FFD43B", "#7C3AED", "#10B981"];
 
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = 15_000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 function readStoredProfile(): JoinProfile | null {
   if (typeof window === "undefined") return null;
   try {
@@ -104,10 +118,12 @@ export default function RoomPage() {
       try {
         const selectedProfile = profile;
         if (!selectedProfile) throw new Error("profile-required");
-        const guest = await fetch("/api/auth/guest", { method: "POST" });
+        const guest = await fetchWithTimeout("/api/auth/guest", {
+          method: "POST",
+        });
         const response =
           guest.ok && room?.status === "lobby"
-            ? await fetch(`/api/rooms/${roomId}/join`, {
+            ? await fetchWithTimeout(`/api/rooms/${roomId}/join`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify(selectedProfile),
@@ -119,7 +135,9 @@ export default function RoomPage() {
         setConfirmed(true);
       } catch {
         setJoining(false);
-        setError("No se pudo entrar en la sala.");
+        setError(
+          "La conexion tardo demasiado. Revisa tu red y vuelve a intentar.",
+        );
       }
     }
 
