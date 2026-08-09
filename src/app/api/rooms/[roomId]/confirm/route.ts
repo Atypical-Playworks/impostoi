@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { viewFor } from "@/lib/game-state";
+import { deserializeGameState } from "@/lib/live-game-state";
+import { publishPrivateViews } from "@/lib/portal-server";
 
 import {
   normalizeRoomCode,
@@ -75,15 +78,40 @@ export async function POST(
       ? participantData.find((item) => item.player_id === user.id)
       : null;
   }
-  if (participant?.seat_status === "confirmed")
-    return NextResponse.json({ ok: true });
-  const { data: confirmed, error } = await admin.rpc(
-    "confirm_room_participant",
-    { requested_code: code, requested_player_id: user.id },
-  );
-  if (error)
-    return NextResponse.json(roomError("room-unavailable"), { status: 503 });
-  if (confirmed !== true)
-    return NextResponse.json(roomError("room-expired"), { status: 409 });
+
+  let isConfirmed = false;
+  if (participant?.seat_status === "confirmed") {
+    isConfirmed = true;
+  } else {
+    const { data: confirmed, error } = await admin.rpc(
+      "confirm_room_participant",
+      { requested_code: code, requested_player_id: user.id },
+    );
+    if (error)
+      return NextResponse.json(roomError("room-unavailable"), { status: 503 });
+    if (confirmed !== true)
+      return NextResponse.json(roomError("room-expired"), { status: 409 });
+    isConfirmed = true;
+  }
+
+  if (isConfirmed) {
+    const existing = await admin.rpc("read_live_match_state", {
+      requested_code: code,
+    });
+    if (!existing.error && existing.data?.state) {
+      try {
+        const matchState = deserializeGameState(existing.data.state);
+        await publishPrivateViews(code, [
+          {
+            userId: user.id,
+            content: { type: "state", view: viewFor(matchState, user.id) },
+          },
+        ]);
+      } catch (err) {
+        console.error("Failed to republish private views on confirm:", err);
+      }
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }

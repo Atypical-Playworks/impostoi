@@ -461,17 +461,22 @@ function LiveRoundRoom({
   const [isHost, setIsHost] = useState(lobbyConfig.isHost);
   const [admissionConfirmed, setAdmissionConfirmed] = useState(false);
   const [profile] = useState<PlayerProfile | null>(() => readPlayerProfile());
+  const [liveView, setLiveView] = useState<PrivateGameView | null>(null);
   const { messages, ext, me, presence, setMetadata, status } =
     useChannel<LiveMessage>({
       channelId,
       metadata: profile ? { ...profile, activity: "idle", isHost } : {},
+      onMessage: (message) => {
+        const next = readLiveMatchView(message.content);
+        if (next) setLiveView(next);
+      },
     });
 
   useEffect(() => {
     setIsHost(lobbyConfig.isHost);
   }, [lobbyConfig.isHost]);
 
-  let view: PrivateGameView | null = readLiveMatchView(ext?.match);
+  let view: PrivateGameView | null = liveView ?? readLiveMatchView(ext?.match);
   for (const message of messages) {
     const next = readLiveMatchView(message.content);
     if (next) view = next;
