@@ -80,11 +80,19 @@ export default function RoomPage() {
       <main className="round-shell">
         <section className="round-card lobby-card">
           <p className="eyebrow">Confirmar entrada</p>
-          <h1>{room?.code ?? roomId}</h1>
+          <h1 aria-busy={!room}>
+            {room ? (
+              room.code
+            ) : (
+              <span className="skeleton-line room-code-heading-skeleton" />
+            )}
+          </h1>
           <p>
-            {room
-              ? `${room.humanCount}/${room.capacity} jugadores · ${room.agentReady ? "IA lista" : "IA no disponible"}`
-              : "Consultando la sala..."}
+            {room ? (
+              `${room.humanCount}/${room.capacity} jugadores · ${room.agentReady ? "IA lista" : "IA no disponible"}`
+            ) : (
+              <span className="skeleton-line room-meta-skeleton" />
+            )}
           </p>
           <button
             type="button"

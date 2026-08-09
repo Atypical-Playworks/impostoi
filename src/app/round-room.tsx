@@ -77,8 +77,10 @@ export function RoundRoom({
   roomId?: string;
 }) {
   const [setup, setSetup] = useState<LiveSetup>({ status: "loading" });
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
+    if (retryNonce > 0) setSetup({ status: "loading" });
     if (
       !publicRuntimeConfig.portalKey ||
       !publicRuntimeConfig.supabaseUrl ||
@@ -116,7 +118,7 @@ export function RoundRoom({
     return () => {
       active = false;
     };
-  }, [roomId]);
+  }, [roomId, retryNonce]);
 
   if (setup.status === "fallback") {
     return (
@@ -128,7 +130,14 @@ export function RoundRoom({
   }
   if (setup.status === "loading") {
     return (
-      <RoundConnection onLeave={onLeave} label="Conectando con la sala..." />
+      <LiveLobby
+        loading
+        onLeave={onLeave}
+        onRetry={() => setRetryNonce((current) => current + 1)}
+        onStart={() => undefined}
+        participants={[]}
+        roomCode={null}
+      />
     );
   }
   if (setup.status === "error") {
@@ -141,7 +150,12 @@ export function RoundRoom({
   }
   return (
     <PortalProvider client={setup.client} token={setup.token}>
-      <LiveRoundRoom channelId={`room-${roomId}`} onLeave={onLeave} />
+      <LiveRoundRoom
+        key={`${roomId}-${retryNonce}`}
+        channelId={`room-${roomId}`}
+        onLeave={onLeave}
+        onRetry={() => setRetryNonce((current) => current + 1)}
+      />
     </PortalProvider>
   );
 }
@@ -173,14 +187,21 @@ function RoundConnection({
 function LiveLobby({
   onLeave,
   onStart,
+  onRetry,
   participants,
   roomCode,
+  loading = false,
+  timedOut = false,
 }: {
   onLeave: () => void;
   onStart: () => void;
+  onRetry?: () => void;
   participants: RoundParticipant[];
-  roomCode: string;
+  roomCode: string | null;
+  loading?: boolean;
+  timedOut?: boolean;
 }) {
+  const isPending = loading || timedOut;
   return (
     <main className="round-shell">
       <header className="round-header">
@@ -201,47 +222,97 @@ function LiveLobby({
               <p className="eyebrow">Sala de espera</p>
               <h1>Tu sala esta lista</h1>
             </div>
-            <div className="room-code-badge">{roomCode}</div>
+            <output
+              className={`room-code-badge${isPending ? " skeleton-block" : " lobby-reveal"}`}
+              aria-label={isPending ? "Codigo de sala cargando" : undefined}
+            >
+              {isPending ? <span className="sr-only">Cargando</span> : roomCode}
+            </output>
           </div>
           <div className="round-card lobby-card">
-            <span className="big-round-icon">
-              <Sparkles size={32} />
+            <span
+              className={`big-round-icon${isPending ? " skeleton-icon" : ""}`}
+            >
+              {!isPending && <Sparkles size={32} />}
             </span>
             <p className="eyebrow">Eres el anfitrion</p>
-            <h2>Esperando jugadores</h2>
-            <p>Comparte el codigo para que tus amigos se unan.</p>
-            <button type="button" className="round-primary" onClick={onStart}>
-              Comenzar ronda <Target size={19} />
-            </button>
+            {timedOut ? (
+              <>
+                <h2>No pudimos cargar la sala</h2>
+                <p>La conexion esta tardando mas de lo esperado.</p>
+                <button
+                  type="button"
+                  className="round-primary"
+                  onClick={onRetry}
+                >
+                  Reintentar
+                </button>
+              </>
+            ) : (
+              <>
+                <h2>{loading ? "" : "Esperando jugadores"}</h2>
+                {loading ? (
+                  <span className="skeleton-line lobby-title-skeleton" />
+                ) : (
+                  <p>Comparte el codigo para que tus amigos se unan.</p>
+                )}
+                <button
+                  type="button"
+                  className="round-primary"
+                  disabled={loading}
+                  onClick={onStart}
+                >
+                  {loading ? "Cargando sala..." : "Comenzar ronda"}
+                  {!loading && <Target size={19} />}
+                </button>
+              </>
+            )}
           </div>
         </section>
         <aside className="round-sidebar">
           <div className="sidebar-heading">
             <Users size={19} />
             <strong>Participantes</strong>
-            <span>{participants.length}/6</span>
+            {loading ? (
+              <span className="skeleton-line participant-count-skeleton" />
+            ) : (
+              <span>{participants.length}/6</span>
+            )}
           </div>
           <div className="participant-list">
-            {participants.map((participant) => (
-              <div className="participant-card" key={participant.id}>
-                <span
-                  className="round-avatar"
-                  style={{ backgroundColor: participant.avatar }}
-                >
-                  {participant.alias[0]}
-                </span>
-                <div>
-                  <strong>
-                    {participant.alias}
-                    {participant.isYou ? " (tu)" : ""}
-                  </strong>
-                  <small>
-                    <i className={`activity-dot ${participant.activity}`} />
-                    {participant.isYou ? " Anfitrion" : " Conectado"}
-                  </small>
-                </div>
-              </div>
-            ))}
+            {loading
+              ? ["skeleton-1", "skeleton-2"].map((id) => (
+                  <div className="participant-card" key={id}>
+                    <span className="round-avatar skeleton-avatar" />
+                    <div className="participant-skeleton-copy">
+                      <span className="skeleton-line" />
+                      <span className="skeleton-line" />
+                    </div>
+                  </div>
+                ))
+              : participants.map((participant) => (
+                  <div
+                    className="participant-card lobby-reveal"
+                    key={participant.id}
+                  >
+                    <span
+                      className="round-avatar"
+                      style={{ backgroundColor: participant.avatar }}
+                    >
+                      {participant.alias[0]}
+                    </span>
+                    <div>
+                      <strong>
+                        {participant.alias}
+                        {participant.isYou ? " (tu)" : ""}
+                      </strong>
+                      <small>
+                        <i className={`activity-dot ${participant.activity}`} />
+                        {participant.isYou ? " Anfitrion" : " Conectado"}
+                      </small>
+                    </div>
+                  </div>
+                ))}
           </div>
           <div className="privacy-note">
             <Shield size={17} />
@@ -260,9 +331,11 @@ type LiveMessage = {
 function LiveRoundRoom({
   channelId,
   onLeave,
+  onRetry,
 }: {
   channelId: string;
   onLeave: () => void;
+  onRetry: () => void;
 }) {
   const [draftClue, setDraftClue] = useState("");
   const [draftDiscussion, setDraftDiscussion] = useState("");
@@ -283,6 +356,19 @@ function LiveRoundRoom({
     const next = readLiveMatchView(message.content);
     if (next) view = next;
   }
+
+  const hasMatchView = view !== null;
+  const hasPresenceSnapshot = presence?.kind === "detailed";
+  const [lobbyTimedOut, setLobbyTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (hasMatchView || hasPresenceSnapshot) {
+      setLobbyTimedOut(false);
+      return;
+    }
+    const timeout = window.setTimeout(() => setLobbyTimedOut(true), 8_000);
+    return () => window.clearTimeout(timeout);
+  }, [hasMatchView, hasPresenceSnapshot]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -329,14 +415,29 @@ function LiveRoundRoom({
             };
           })
         : [];
-    if (connectedParticipants.length === 0) {
-      connectedParticipants.push({
-        id: me?.id ?? "pending",
-        alias: "Gato Ninja",
-        avatar: "#21D4D4",
-        activity: "idle",
-        isYou: true,
-      });
+    if (!hasPresenceSnapshot && !lobbyTimedOut) {
+      return (
+        <LiveLobby
+          loading
+          onLeave={onLeave}
+          onRetry={onRetry}
+          onStart={() => undefined}
+          participants={[]}
+          roomCode={channelId.replace(/^room-/, "")}
+        />
+      );
+    }
+    if (lobbyTimedOut) {
+      return (
+        <LiveLobby
+          onLeave={onLeave}
+          onRetry={onRetry}
+          onStart={() => undefined}
+          participants={[]}
+          roomCode={channelId.replace(/^room-/, "")}
+          timedOut
+        />
+      );
     }
     return (
       <LiveLobby

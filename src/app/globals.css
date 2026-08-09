@@ -1162,6 +1162,89 @@ button {
   letter-spacing: 0.18em;
   box-shadow: 0 4px 0 var(--ink);
 }
+.skeleton-line,
+.skeleton-block {
+  display: inline-block;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #45227d 25%, #6239a0 50%, #45227d 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.skeleton-block {
+  color: transparent;
+}
+.lobby-reveal {
+  animation: lobby-reveal 180ms ease-out both;
+}
+.room-code-heading-skeleton {
+  width: 150px;
+  height: 1em;
+  vertical-align: middle;
+}
+.room-meta-skeleton {
+  width: min(270px, 75vw);
+  height: 1.2em;
+}
+.lobby-title-skeleton {
+  width: min(260px, 70vw);
+  height: 42px;
+}
+.participant-count-skeleton {
+  width: 42px;
+  height: 1.2em;
+}
+.skeleton-icon {
+  border-color: var(--ink);
+  background: linear-gradient(90deg, #26a4a4 25%, #51c9c9 50%, #26a4a4 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.skeleton-avatar {
+  border-color: #45227d;
+  background: linear-gradient(90deg, #45227d 25%, #6239a0 50%, #45227d 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.participant-skeleton-copy {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+}
+.participant-skeleton-copy .skeleton-line:first-child {
+  width: 65%;
+  height: 16px;
+}
+.participant-skeleton-copy .skeleton-line:last-child {
+  width: 42%;
+  height: 11px;
+}
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@keyframes lobby-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line,
+  .skeleton-block,
+  .skeleton-icon,
+  .skeleton-avatar {
+    animation: none;
+  }
+  .lobby-reveal {
+    animation: none;
+  }
+}
 .sr-only {
   position: absolute;
   width: 1px;
