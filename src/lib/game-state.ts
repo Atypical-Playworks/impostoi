@@ -58,6 +58,8 @@ export type PublicGameView = {
   clues: readonly { alias: string; text: string }[];
   voteTally?: Readonly<Record<string, number>>;
   impostorVoteTally?: Readonly<Record<string, number>>;
+  agentId?: string;
+  impostorId?: string;
 };
 
 export type PrivateGameView = PublicGameView & {
@@ -374,6 +376,8 @@ export function publicViewFor(state: GameState): PublicGameView {
       ? {
           voteTally: tally(state.round.votes.ai_detection),
           impostorVoteTally: tally(state.round.votes.impostor),
+          agentId: state.round.agentId,
+          impostorId: state.round.impostorId,
         }
       : {}),
   };

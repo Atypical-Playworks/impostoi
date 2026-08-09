@@ -818,7 +818,14 @@ function LiveRoundRoom({
             />
           ) : null}
           {view.phase === "reveal" ? (
-            <Reveal onResults={() => void submit(liveAction("show_results"))} />
+            <Reveal
+              agentId={view.agentId}
+              impostorId={view.impostorId}
+              voteTally={view.voteTally}
+              impostorVoteTally={view.impostorVoteTally}
+              participants={participants}
+              onResults={() => void submit(liveAction("show_results"))}
+            />
           ) : null}
           {view.phase === "results" ? <Results /> : null}
         </section>
@@ -956,7 +963,29 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
             />
           ) : null}
           {phase === "reveal" ? (
-            <Reveal onResults={() => setPhase("results")} />
+            <Reveal
+              agentId="demo-1"
+              impostorId="demo-2"
+              voteTally={{ "demo-1": 1 }}
+              impostorVoteTally={{ "demo-2": 1 }}
+              participants={[
+                {
+                  id: "demo-1",
+                  alias: "Participante",
+                  avatar: "#21D4D4",
+                  activity: "idle",
+                  isYou: true,
+                },
+                {
+                  id: "demo-2",
+                  alias: "Impostor",
+                  avatar: "#D42121",
+                  activity: "idle",
+                  isYou: false,
+                },
+              ]}
+              onResults={() => setPhase("results")}
+            />
           ) : null}
           {phase === "results" ? <Results /> : null}
         </section>
@@ -1191,7 +1220,47 @@ function Voting({
   );
 }
 
-function Reveal({ onResults }: { onResults: () => void }) {
+function getMostVoted(tally?: Readonly<Record<string, number>>): string | null {
+  if (!tally) return null;
+  let maxVotes = 0;
+  let maxId: string | null = null;
+  let isTie = false;
+  for (const [id, votes] of Object.entries(tally)) {
+    if (votes > maxVotes) {
+      maxVotes = votes;
+      maxId = id;
+      isTie = false;
+    } else if (votes === maxVotes) {
+      isTie = true;
+    }
+  }
+  return isTie ? null : maxId;
+}
+
+function Reveal({
+  agentId,
+  impostorId,
+  voteTally,
+  impostorVoteTally,
+  participants,
+  onResults,
+}: {
+  agentId?: string;
+  impostorId?: string;
+  voteTally?: Readonly<Record<string, number>>;
+  impostorVoteTally?: Readonly<Record<string, number>>;
+  participants: readonly RoundParticipant[];
+  onResults: () => void;
+}) {
+  const agentParticipant = participants.find((p) => p.id === agentId);
+  const impostorParticipant = participants.find((p) => p.id === impostorId);
+
+  const caughtAiId = getMostVoted(voteTally);
+  const caughtImpostorId = getMostVoted(impostorVoteTally);
+
+  const aiCaught = caughtAiId === agentId && agentId != null;
+  const impostorCaught = caughtImpostorId === impostorId && impostorId != null;
+
   return (
     <div className="round-card reveal-card">
       <span className="big-round-icon pink-icon">
@@ -1199,19 +1268,29 @@ function Reveal({ onResults }: { onResults: () => void }) {
       </span>
       <p className="eyebrow">Votacion cerrada</p>
       <h2>Roles revelados</h2>
-      <p>La sala ya puede mostrar el resultado de la ronda.</p>
+      <p>La sala ha revelado las identidades de esta ronda.</p>
       <div className="reveal-roles">
         <span>
           <b>IA</b>
-          <small>Resultado privado</small>
+          <small>{agentParticipant?.alias ?? "Desconocido"}</small>
+          {aiCaught ? (
+            <span className="caught-tag text-red-500">¡Atrapada!</span>
+          ) : (
+            <span className="escaped-tag text-green-500">Escapó</span>
+          )}
         </span>
         <span>
           <b>IMPOSTOR</b>
-          <small>Resultado privado</small>
+          <small>{impostorParticipant?.alias ?? "Desconocido"}</small>
+          {impostorCaught ? (
+            <span className="caught-tag text-red-500">¡Atrapado!</span>
+          ) : (
+            <span className="escaped-tag text-green-500">Escapó</span>
+          )}
         </span>
       </div>
       <button type="button" className="round-primary" onClick={onResults}>
-        Ver resultados <Target size={19} />
+        Siguiente <Target size={19} />
       </button>
     </div>
   );
