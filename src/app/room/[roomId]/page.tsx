@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { RoundRoom } from "@/app/round-room";
 
@@ -14,15 +14,34 @@ type PublicRoom = {
   isHost: boolean;
 };
 type JoinProfile = { alias: string; avatar: string };
+const avatarOptions = ["#21D4D4", "#F43FA7", "#FFD43B", "#7C3AED", "#10B981"];
+
+function readStoredProfile(): JoinProfile | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = JSON.parse(
+      sessionStorage.getItem("impostoi_join_profile") ?? "null",
+    ) as Partial<JoinProfile> | null;
+    return stored?.alias && stored.avatar
+      ? { alias: stored.alias, avatar: stored.avatar }
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function RoomPage() {
   const params = useParams<{ roomId: string }>();
   const router = useRouter();
   const roomId = params.roomId?.toUpperCase() ?? "";
   const [room, setRoom] = useState<PublicRoom | null>(null);
+  const [profile, setProfile] = useState<JoinProfile | null>(() =>
+    readStoredProfile(),
+  );
   const [confirmed, setConfirmed] = useState(false);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const aliasId = useId();
 
   useEffect(() => {
     if (!roomId) return;
@@ -54,17 +73,6 @@ export default function RoomPage() {
   if (!confirmed) {
     async function confirmJoin() {
       setJoining(true);
-      let profile: JoinProfile | null = null;
-      try {
-        const stored = JSON.parse(
-          sessionStorage.getItem("impostoi_join_profile") ?? "null",
-        ) as Partial<JoinProfile> | null;
-        if (stored?.alias && stored.avatar) {
-          profile = { alias: stored.alias, avatar: stored.avatar };
-        }
-      } catch {
-        // The server validates the fallback profile and the submitted values.
-      }
       try {
         const selectedProfile = profile;
         if (!selectedProfile) throw new Error("profile-required");
@@ -105,11 +113,58 @@ export default function RoomPage() {
               <span className="skeleton-line room-meta-skeleton" />
             )}
           </p>
+          <label className="modal-label" htmlFor={aliasId}>
+            Tu alias para esta partida
+          </label>
+          <input
+            id={aliasId}
+            className="room-input"
+            value={profile?.alias ?? ""}
+            maxLength={24}
+            onChange={(event) => {
+              const next = {
+                alias: event.target.value,
+                avatar: profile?.avatar ?? avatarOptions[0],
+              };
+              setProfile(next);
+              sessionStorage.setItem(
+                "impostoi_join_profile",
+                JSON.stringify(next),
+              );
+            }}
+            placeholder="Escribe tu alias"
+          />
+          <div>
+            <span className="modal-label">Color de avatar</span>
+            <div className="color-row">
+              {avatarOptions.map((avatar) => (
+                <button
+                  key={avatar}
+                  type="button"
+                  className={`color-choice ${profile?.avatar === avatar ? "selected" : ""}`}
+                  style={{ backgroundColor: avatar }}
+                  aria-label={`Elegir color ${avatar}`}
+                  onClick={() => {
+                    const next = {
+                      alias: profile?.alias ?? "",
+                      avatar,
+                    };
+                    setProfile(next);
+                    sessionStorage.setItem(
+                      "impostoi_join_profile",
+                      JSON.stringify(next),
+                    );
+                  }}
+                />
+              ))}
+            </div>
+          </div>
           <button
             type="button"
             className="round-primary"
             disabled={
               !room ||
+              !profile?.alias.trim() ||
               (room.status !== "lobby" && room.status !== "started") ||
               (room.status === "lobby" && room.humanCount >= room.capacity) ||
               joining
