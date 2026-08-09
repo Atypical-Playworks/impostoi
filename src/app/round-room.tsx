@@ -58,7 +58,7 @@ type LiveSetup =
   | { status: "loading" }
   | { status: "fallback" }
   | { status: "error" }
-  | { status: "ready"; client: Portal; token: string };
+  | { status: "ready"; client: Portal; tokenFetcher: () => Promise<string> };
 
 type LobbyConfig = {
   capacity: 4 | 5;
@@ -132,22 +132,29 @@ export function RoundRoom({
         }
         const guest = await fetch("/api/auth/guest", { method: "POST" });
         if (!guest.ok) throw new Error("guest-session");
-        const tokenResponse = await fetch("/api/portal/token", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ roomId }),
-        });
-        if (!tokenResponse.ok) throw new Error("portal-token");
-        const payload = (await tokenResponse.json()) as { token?: string };
-        if (!payload.token) throw new Error("portal-token");
+        const tokenFetcher = async (): Promise<string> => {
+          const tokenResponse = await fetch("/api/portal/token", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ roomId }),
+          });
+          if (!tokenResponse.ok) throw new Error("portal-token");
+          const payload = (await tokenResponse.json()) as { token?: string };
+          if (!payload.token) throw new Error("portal-token");
+          return payload.token;
+        };
+
+        // Test fetching once to catch initial errors
+        await tokenFetcher();
+
         if (active) {
           setSetup({
             status: "ready",
             client: new Portal({
               apiKey: config.portalKey,
-              token: payload.token,
+              token: tokenFetcher,
             }),
-            token: payload.token,
+            tokenFetcher,
           });
         }
       } catch {
@@ -193,7 +200,7 @@ export function RoundRoom({
     );
   }
   return (
-    <PortalProvider client={setup.client} token={setup.token}>
+    <PortalProvider client={setup.client} token={setup.tokenFetcher}>
       <LiveRoundRoom
         key={`${roomId}-${retryNonce}`}
         channelId={`room-${roomId}`}
