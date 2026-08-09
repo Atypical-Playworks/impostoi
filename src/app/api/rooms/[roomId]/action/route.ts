@@ -5,7 +5,6 @@ import {
   advanceTimedOutPhase,
   createGame,
   endMatch,
-  publicViewFor,
   showResults,
   startCluePhase,
   startNextRound,
@@ -170,7 +169,7 @@ export async function POST(
       });
     } else if (action === "start_clue_phase" && state.phase !== "lobby") {
       // Already started — idempotent: just broadcast current state.
-      return NextResponse.json({ ok: true, view: publicViewFor(state) });
+      return NextResponse.json({ ok: true, view: viewFor(state, user.id) });
     }
 
     switch (action as LiveActionName) {
@@ -344,5 +343,5 @@ export async function POST(
   ).catch((err) => {
     console.error("Failed background private view dispatch:", err);
   });
-  return NextResponse.json({ ok: true, view: publicViewFor(state) });
+  return NextResponse.json({ ok: true, view: viewFor(state, user.id) });
 }

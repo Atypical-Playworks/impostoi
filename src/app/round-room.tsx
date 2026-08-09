@@ -589,12 +589,17 @@ function LiveRoundRoom({
         body: JSON.stringify({ action, ...payload }),
       },
     );
+    const result = (await response.json().catch(() => null)) as {
+      ok?: boolean;
+      view?: PrivateGameView;
+      error?: string;
+    } | null;
     if (!response.ok) {
-      const result = (await response.json().catch(() => null)) as {
-        error?: string;
-      } | null;
       setActionError(result?.error ?? "No se pudo procesar la accion.");
       return;
+    }
+    if (result?.view) {
+      setLiveView(result.view);
     }
   };
 
