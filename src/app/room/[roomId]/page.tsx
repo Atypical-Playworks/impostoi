@@ -80,6 +80,7 @@ export default function RoomPage() {
         if (!response.ok || !("code" in payload)) throw new Error("room");
         if (active) {
           setRoom(payload);
+          if (payload.isHost) setConfirmed(true);
           setError(null);
         }
       })
