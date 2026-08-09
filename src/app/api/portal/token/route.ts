@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { roomChannelId, validateRoomId } from "@/lib/portal-room";
+import { validateRoomCode } from "@/lib/room-lifecycle";
 import { readServerRuntimeConfig } from "@/lib/server-env-config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -28,7 +29,8 @@ export async function POST(request: Request) {
   if (
     !isRecord(body) ||
     typeof body.roomId !== "string" ||
-    !validateRoomId(body.roomId)
+    !validateRoomId(body.roomId) ||
+    !validateRoomCode(body.roomId)
   ) {
     return NextResponse.json({ error: "invalid-room" }, { status: 400 });
   }
