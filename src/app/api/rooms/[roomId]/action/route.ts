@@ -162,7 +162,7 @@ export async function POST(
             avatar: item.avatar,
             kind: "player" as const,
           })),
-          { id: "agent", alias: "Nube", avatar: "#7C3AED", kind: "agent" },
+          { id: "agent", alias: "IA", avatar: "#7C3AED", kind: "agent" },
         ],
         category: pick.category,
         secretWord: pick.word,

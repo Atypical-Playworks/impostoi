@@ -11,7 +11,7 @@ const state = createGame({
     { id: "p2", alias: "Luis", avatar: "moon", kind: "player" },
     { id: "p3", alias: "Sol", avatar: "star", kind: "player" },
     { id: "p4", alias: "Rio", avatar: "rain", kind: "player" },
-    { id: "agent", alias: "Nube", avatar: "cloud", kind: "agent" },
+    { id: "agent", alias: "IA", avatar: "cloud", kind: "agent" },
   ],
   category: "Animales",
   secretWord: "zorro",

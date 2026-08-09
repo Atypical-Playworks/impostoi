@@ -21,11 +21,11 @@ the jury cannot access.
 
 Use the fixed room code `IMPOST` and the five prepared demo Participants. The
 demo is deterministic: `Gato Ninja` is the local Player, the other four
-Participants are `Luna Pixel`, `Sol Rebelde`, `Rio Turbo`, and `Nube`.
+Participants are `Luna Pixel`, `Sol Rebelde`, `Rio Turbo`, and `IA`.
 
 | Time | Action and narration |
 | --- | --- |
-| 00:00-00:08 | Open the product, create room `IMPOST`, and show the 4-5 Players plus one hidden Agent. |
+| 00:00-00:08 | Open the product, create room `IMPOST`, and show the 3-5 Players plus one hidden Agent. |
 | 00:08-00:18 | Start the Round. Point out random Aliases, Avatars, Presence, the public Category, and the private-word card. |
 | 00:18-00:30 | Submit one Clue as `Gato Ninja`; show the immutable public Clue list and the other Participants' activity. |
 | 00:30-00:40 | Explain that the production room uses a Portal snapshot for late joiners; do not present the local reproducible view as a live Portal connection. |

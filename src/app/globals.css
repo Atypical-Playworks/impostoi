@@ -1735,7 +1735,7 @@ button {
   }
 }
 
-@media (min-width: 561px) and (max-width: 1200px) {
+@media (min-width: 561px) and (max-width: 1400px) {
   .site-header {
     min-height: 350px;
   }

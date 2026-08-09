@@ -128,7 +128,7 @@ function CreateRoomModal({
   const [code, setCode] = useState("");
   const [alias, setAlias] = useState("");
   const [avatar, setAvatar] = useState(palette[0]);
-  const [capacity, setCapacity] = useState<4 | 5>(4);
+  const [capacity, setCapacity] = useState<3 | 4 | 5>(4);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const aliasId = useId();
@@ -210,6 +210,13 @@ function CreateRoomModal({
             <div className="choice-group">
               <button
                 type="button"
+                className={capacity === 3 ? "choice active" : "choice"}
+                onClick={() => setCapacity(3)}
+              >
+                3
+              </button>
+              <button
+                type="button"
                 className={capacity === 4 ? "choice active" : "choice"}
                 onClick={() => setCapacity(4)}
               >
@@ -226,7 +233,7 @@ function CreateRoomModal({
           </div>
           <div className="modal-note">
             <Users size={18} color="var(--cyan)" />
-            <span>Se uniran 4 o 5 jugadores y una IA oculta.</span>
+            <span>Se uniran 3 a 5 jugadores y una IA oculta.</span>
           </div>
           <button
             type="button"
@@ -520,7 +527,7 @@ export default function HomePage() {
 
         <div className="info-bar">
           <span>
-            <Users size={20} /> 4-5 jugadores + 1 IA oculta
+            <Users size={20} /> 3-5 jugadores + 1 IA oculta
           </span>
           <i />
           <span>

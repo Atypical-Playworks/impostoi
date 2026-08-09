@@ -16,7 +16,7 @@ const participants = [
   { id: "p2", alias: "Sol", avatar: "b", kind: "player" as const },
   { id: "p3", alias: "Rio", avatar: "c", kind: "player" as const },
   { id: "p4", alias: "Mar", avatar: "d", kind: "player" as const },
-  { id: "agent", alias: "Nube", avatar: "e", kind: "agent" as const },
+  { id: "agent", alias: "IA", avatar: "e", kind: "agent" as const },
 ];
 
 function readyGame() {
