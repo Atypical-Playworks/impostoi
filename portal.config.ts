@@ -4,7 +4,7 @@ export default defineConfig({
   channels: {
     "room-*": {
       mode: "standard",
-      anonymous: false,
+      anonymous: true,
     },
   },
 });
