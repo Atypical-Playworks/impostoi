@@ -406,16 +406,26 @@ function LiveRoundRoom({
 
   const hasMatchView = view !== null;
   const hasPresenceSnapshot = presence?.kind === "detailed";
+  const localParticipant: RoundParticipant | null = me
+    ? {
+        id: me.id,
+        alias: "Gato Ninja",
+        avatar: "#21D4D4",
+        activity: "idle",
+        isYou: true,
+      }
+    : null;
+  const hasPortalIdentity = localParticipant !== null;
   const [lobbyTimedOut, setLobbyTimedOut] = useState(false);
 
   useEffect(() => {
-    if (hasMatchView || hasPresenceSnapshot) {
+    if (hasMatchView || hasPresenceSnapshot || hasPortalIdentity) {
       setLobbyTimedOut(false);
       return;
     }
     const timeout = window.setTimeout(() => setLobbyTimedOut(true), 8_000);
     return () => window.clearTimeout(timeout);
-  }, [hasMatchView, hasPresenceSnapshot]);
+  }, [hasMatchView, hasPortalIdentity, hasPresenceSnapshot]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -439,15 +449,6 @@ function LiveRoundRoom({
   }, [me, setMetadata, view?.phase]);
 
   if (!view) {
-    const localParticipant: RoundParticipant | null = me
-      ? {
-          id: me.id,
-          alias: "Gato Ninja",
-          avatar: "#21D4D4",
-          activity: "idle",
-          isYou: true,
-        }
-      : null;
     const connectedParticipants: RoundParticipant[] =
       presence?.kind === "detailed"
         ? presence.participants.map((participant) => {
@@ -470,8 +471,10 @@ function LiveRoundRoom({
               isYou: participant.id === me?.id,
             };
           })
-        : [];
-    if (!hasPresenceSnapshot && !lobbyTimedOut) {
+        : localParticipant
+          ? [localParticipant]
+          : [];
+    if (!hasPresenceSnapshot && !hasPortalIdentity && !lobbyTimedOut) {
       return (
         <LiveLobby
           loading
@@ -484,7 +487,7 @@ function LiveRoundRoom({
         />
       );
     }
-    if (lobbyTimedOut) {
+    if (!hasPresenceSnapshot && !hasPortalIdentity && lobbyTimedOut) {
       return (
         <LiveLobby
           onLeave={onLeave}
