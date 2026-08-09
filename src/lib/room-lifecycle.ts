@@ -2,7 +2,7 @@ export const ROOM_CODE_LENGTH = 6;
 export const ROOM_CAPACITIES = [4, 5] as const;
 
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-const roomCodePattern = /^[A-HJ-NP-Z2-9]{6}$/;
+const roomCodePattern = /^[A-HJKMNPQRSTUVWXYZ23456789]{6}$/;
 
 export type RoomCapacity = (typeof ROOM_CAPACITIES)[number];
 export type RoomLifecycleStatus = "lobby" | "started" | "expired" | "cancelled";

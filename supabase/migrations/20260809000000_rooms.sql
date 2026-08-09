@@ -82,7 +82,7 @@ begin
   end if;
   insert into public.room_participants (room_code, player_id, alias, avatar)
   values (room_row.code, requested_player_id, requested_alias, requested_avatar)
-  on conflict (room_code, player_id) do update set alias = excluded.alias, avatar = excluded.avatar;
+  on conflict (room_code, player_id) do nothing;
   if (select count(*) from public.room_participants where room_code = room_row.code) > room_row.capacity then
     raise exception 'room-full';
   end if;
@@ -94,11 +94,30 @@ begin
 end;
 $$;
 
+create or replace function public.is_room_member(
+  requested_code text,
+  requested_player_id uuid
+)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.room_participants
+    where room_code = upper(requested_code)
+      and player_id = requested_player_id
+  );
+$$;
+
 revoke all on public.rooms from anon, authenticated;
 revoke all on public.room_participants from anon, authenticated;
 revoke all on function public.create_room from public;
 revoke all on function public.get_public_room from public;
 revoke all on function public.join_room from public;
+revoke all on function public.is_room_member from public;
 grant execute on function public.create_room to service_role;
 grant execute on function public.get_public_room to service_role;
 grant execute on function public.join_room to service_role;
+grant execute on function public.is_room_member to service_role;

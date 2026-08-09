@@ -16,6 +16,7 @@ describe("server room lifecycle contract", () => {
     expect(code).toBe("AAAAAA");
     expect(validateRoomCode("ahjkmnp234".slice(0, 6))).toBe(true);
     expect(validateRoomCode("A0O1IL")).toBe(false);
+    expect(validateRoomCode("ABC2L3")).toBe(false);
     expect(validateRoomCode("ABC12")).toBe(false);
   });
 
