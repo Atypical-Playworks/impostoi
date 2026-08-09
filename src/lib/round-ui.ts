@@ -6,8 +6,6 @@ export function phaseTitle(phase: MatchPhase): string {
       return "Sala de espera";
     case "clue_phase":
       return "Turno de pistas";
-    case "discussion":
-      return "Discusion abierta";
     case "voting":
       return "Votacion privada";
     case "reveal":
@@ -29,5 +27,6 @@ export function formatTimer(seconds: number): string {
 }
 
 export function canSubmitClue(clue: string, submitted: boolean): boolean {
-  return !submitted && clue.trim().length > 0;
+  const trimmed = clue.trim();
+  return !submitted && trimmed.length > 0 && !/\s/.test(trimmed);
 }

@@ -1,12 +1,10 @@
 export const MATCH_ROUNDS = 3;
-export const CLUE_PHASE_TIMEOUT_MS = 20_000;
-export const DISCUSSION_TIMEOUT_MS = 60_000;
+export const CLUE_PHASE_TIMEOUT_MS = 10_000;
 export const VOTING_TIMEOUT_MS = 20_000;
 
 export type MatchPhase =
   | "lobby"
   | "clue_phase"
-  | "discussion"
   | "voting"
   | "reveal"
   | "results";
@@ -43,9 +41,9 @@ export type GameState = {
   readonly phase: MatchPhase;
   readonly phaseDeadlineAt?: number;
   readonly votingStage?: VotingStage;
+  readonly activeTurnId?: string;
   readonly participants: readonly Participant[];
   readonly round: PrivateRound;
-  readonly discussion: string;
 };
 
 export type PublicGameView = {
@@ -54,10 +52,10 @@ export type PublicGameView = {
   phase: MatchPhase;
   phaseDeadlineAt?: number;
   votingStage?: VotingStage;
+  activeTurnId?: string;
   participants: readonly PublicParticipant[];
   category: string;
   clues: readonly { alias: string; text: string }[];
-  discussion: string;
   voteTally?: Readonly<Record<string, number>>;
   impostorVoteTally?: Readonly<Record<string, number>>;
 };
@@ -197,7 +195,6 @@ export function createGame(input: CreateGameInput): GameState {
       clues: new Map(),
       votes: { ai_detection: new Map(), impostor: new Map() },
     },
-    discussion: "",
   };
 }
 
@@ -210,6 +207,25 @@ export function startCluePhase(
   requirePhase(state, "lobby");
   return copyState(state, {
     phase: "clue_phase",
+    activeTurnId: state.participants[0]?.id,
+    phaseDeadlineAt: deadlineAfter(now, CLUE_PHASE_TIMEOUT_MS),
+  });
+}
+
+function advanceTurn(state: GameState, now: number): GameState {
+  const currentIndex = state.participants.findIndex(
+    (p) => p.id === state.activeTurnId,
+  );
+  if (currentIndex === -1 || currentIndex === state.participants.length - 1) {
+    return copyState(state, {
+      phase: "voting",
+      votingStage: "ai_detection",
+      activeTurnId: undefined,
+      phaseDeadlineAt: deadlineAfter(now, VOTING_TIMEOUT_MS),
+    });
+  }
+  return copyState(state, {
+    activeTurnId: state.participants[currentIndex + 1].id,
     phaseDeadlineAt: deadlineAfter(now, CLUE_PHASE_TIMEOUT_MS),
   });
 }
@@ -223,45 +239,20 @@ export function submitClue(
   requireParticipant(state, actorId);
   requirePhase(state, "clue_phase");
   requirePhaseOpen(state, now);
-  if (!text.trim()) throw new GameStateError("invalid-clue");
+  if (actorId !== state.activeTurnId) throw new GameStateError("not-your-turn");
+
+  const trimmed = text.trim();
+  if (!trimmed || /\s/.test(trimmed)) throw new GameStateError("invalid-clue");
+
   if (state.round.clues.has(actorId))
     throw new GameStateError("duplicate-clue");
   const clues = new Map(state.round.clues);
-  clues.set(actorId, text.trim());
-  return copyState(state, { round: { ...state.round, clues } });
-}
+  clues.set(actorId, trimmed);
 
-export function startDiscussion(
-  state: GameState,
-  actorId: string,
-  now = Date.now(),
-): GameState {
-  requireHost(state, actorId);
-  requirePhase(state, "clue_phase");
-  requirePhaseOpen(state, now);
-  if (!allSubmitted(state, state.round.clues))
-    throw new GameStateError("clues-incomplete");
-  return copyState(state, {
-    phase: "discussion",
-    phaseDeadlineAt: deadlineAfter(now, DISCUSSION_TIMEOUT_MS),
-  });
-}
-
-export function startVoting(
-  state: GameState,
-  actorId: string,
-  discussion: string,
-  now = Date.now(),
-): GameState {
-  requireHost(state, actorId);
-  requirePhase(state, "discussion");
-  requirePhaseOpen(state, now);
-  return copyState(state, {
-    phase: "voting",
-    votingStage: "ai_detection",
-    discussion: discussion.trim(),
-    phaseDeadlineAt: deadlineAfter(now, VOTING_TIMEOUT_MS),
-  });
+  return advanceTurn(
+    copyState(state, { round: { ...state.round, clues } }),
+    now,
+  );
 }
 
 export function submitVote(
@@ -308,16 +299,7 @@ export function advanceTimedOutPhase(
 
   switch (state.phase) {
     case "clue_phase":
-      return copyState(state, {
-        phase: "discussion",
-        phaseDeadlineAt: deadlineAfter(now, DISCUSSION_TIMEOUT_MS),
-      });
-    case "discussion":
-      return copyState(state, {
-        phase: "voting",
-        votingStage: "ai_detection",
-        phaseDeadlineAt: deadlineAfter(now, VOTING_TIMEOUT_MS),
-      });
+      return advanceTurn(state, now);
     case "voting":
       if (state.votingStage === "ai_detection") {
         return copyState(state, {
@@ -384,10 +366,10 @@ export function publicViewFor(state: GameState): PublicGameView {
       ? { phaseDeadlineAt: state.phaseDeadlineAt }
       : {}),
     ...(state.votingStage ? { votingStage: state.votingStage } : {}),
+    ...(state.activeTurnId ? { activeTurnId: state.activeTurnId } : {}),
     participants,
     category: state.round.category,
     clues,
-    discussion: state.discussion,
     ...(reveal
       ? {
           voteTally: tally(state.round.votes.ai_detection),

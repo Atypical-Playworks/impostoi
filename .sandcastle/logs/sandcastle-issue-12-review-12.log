@@ -1,0 +1,74 @@
+
+--- Run started: 2026-08-08T16:25:22.249Z ---
+Iteration 1/1
+Setting up sandbox
+Setting up sandbox done (0.3s)
+Agent started
+I’ll inspect the branch history and repository contracts first, then trace the changed code for security, authority, concurrency, and test gaps before deciding whether any fixes are warranted.
+todowrite({"todos":[{"content":"Read project contracts and review branch commits/diff","status":"in_progress","priority":"high"},{"content":"Analyze changed code for correctness, security, and scope","status":"pending","priority":"high"},{"content":"Apply necessary fixes and add focused tests","status":"pending","priority":"high"},{"content":"Run verification and commit any improvements","status":"pending","priority":"medium"}]})
+glob({"pattern":"CONTEXT.md"})
+glob({"pattern":"docs/adr/**/*"})
+bash(git status --short && git branch --show-current && git log --oneline --decorate -10 && git diff --stat main...sandcastle/issue-12 && git diff --name-status main...sandcastle/issue-12)
+glob({"pattern":".sandcastle/CODING_STANDARDS.md"})
+read({"filePath":"/home/agent/workspace/CONTEXT.md"})
+read({"filePath":"/home/agent/workspace/.sandcastle/CODING_STANDARDS.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0002-independent-hidden-roles.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0001-live-game-authority.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0005-deployment-and-migrations.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0003-pseudonymous-progress.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0004-agent-runtime-and-benchmarking.md"})
+bash(git diff main...sandcastle/issue-12 -- docs/hackathon-submission.md src/app/round-room.tsx src/lib/submission.ts src/lib/submission.test.ts src/app/globals.css)
+read({"filePath":"/home/agent/workspace/docs/hackathon-submission.md"})
+read({"filePath":"/home/agent/workspace/src/lib/submission.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/submission.test.ts"})
+read({"filePath":"/home/agent/workspace/src/app/round-room.tsx"})
+bash(git diff --check main...sandcastle/issue-12 && git log --oneline main..sandcastle/issue-12)
+bash(git show --stat --oneline --decorate 6cce74b && git show --format=fuller --no-ext-diff --unified=80 6cce74b -- src/app/round-room.tsx src/lib/submission.ts docs/hackathon-submission.md)
+The branch is a single submission-preparation commit. The main review concern is not secret leakage, but that the new UI labels a wholly local demo as “Portal connected,” claims a Portal snapshot was received, and presents a non-functional Replay action. I’m checking the existing contracts and verification output now to distinguish intentional demo scaffolding from regressions that should be corrected.
+grep({"pattern":"RoundRoom|Portal conectado|snapshot-note|Ver Replay|validateSubmission|hackathon-submission","path":"/home/agent/workspace","include":"*.{ts,tsx,md}"})
+read({"filePath":"/home/agent/workspace/package.json"})
+bash(bun run test)
+bash(bun run lint && bun run typecheck && bun run build)
+bash(git diff --numstat main...sandcastle/issue-12 -- src/app/globals.css && git status --short)
+bash(bun run typecheck)
+Agent idle for 1 minute
+bash(bun run build)
+Verification shows the new tests pass and TypeScript/build pass; lint is blocked by pre-existing line-ending/formatting changes across the dirty worktree, not by this commit. I’m applying focused corrections to avoid asserting live Portal/replay behavior that this component does not implement, and tightening the submission validator’s “public” and commit-window checks with behavior tests.
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/app/round-room.tsx\n@@\n         </div>\n         <div className=\"connection-status\">\n-          <i /> Demo reproducible · Portal conectado\n+          <i /> Demo reproducible · Estado local\n@@\n-          <div className=\"snapshot-note\">\n-            <Check size={17} />\n-            <span>Entrada tardia: snapshot actual recibido por Portal.</span>\n-          </div>\n@@\n       <div className=\"replay-summary\">\n-        <strong>Replay disponible</strong>\n-        <span>Claves publicas, tiempos, votos y resultado de esta ronda.</span>\n+        <strong>Replay pendiente</strong>\n+        <span>\n+          Esta vista reproducible no carga todavía el Replay persistido.\n+        </span>\n       </div>\n-      <button type=\"button\" className=\"round-primary\">\n-        Ver Replay <Target size={19} />\n+      <button type=\"button\" className=\"round-primary\" disabled>\n+        Replay no disponible en esta vista <Target size={19} />\n       </button>\n*** Update File: /home/agent/workspace/src/lib/submission.ts\n@@\n function isPublicUrl(value: string): boolean {\n   try {\n     const url = new URL(value);\n-    return url.protocol === \"http:\" || url.protocol === \"https:\";\n+    if (\n+      (url.protocol !== \"http:\" && url.protocol !== \"https:\") ||\n+      url.username ||\n+      url.password\n+    ) {\n+      return false;\n+    }\n+\n+    const hostname = url.hostname.toLowerCase();\n+    return (\n+      hostname !== \"localhost\" &&\n+      hostname !== \"127.0.0.1\" &&\n+      hostname !== \"[::1]\" &&\n+      !hostname.endsWith(\".local\")\n+    );\n   } catch {\n     return false;\n   }\n@@\n   if (!isPublicUrl(input.repositoryUrl)) errors.push(\"repository-url-invalid\");\n   if (input.tag !== HACKATHON_TAG) errors.push(\"required-tag-missing\");\n+  if (input.commitDates.length === 0) errors.push(\"commit-required\");\n \n   for (const date of input.commitDates) {\n*** Update File: /home/agent/workspace/src/lib/submission.test.ts\n@@\n   test(\"enforces the 280 character pitch limit\", () => {\n@@\n     expect(result.errors).toContain(\"pitch-too-long\");\n   });\n+\n+  test(\"requires public links and at least one in-window commit\", () => {\n+    const result = validateSubmission({\n+      pitch: \"pitch\",\n+      deployedUrl: \"http://localhost:3000\",\n+      demoUrl: \"https://demo.example/video\",\n+      repositoryUrl: \"https://user:password@example.com/repo\",\n+      tag: HACKATHON_TAG,\n+      commitDates: [],\n+    });\n+\n+    expect(result.errors).toEqual([\n+      \"deployed-url-invalid\",\n+      \"repository-url-invalid\",\n+      \"commit-required\",\n+    ]);\n+  });\n });\n*** Update File: /home/agent/workspace/docs/hackathon-submission.md\n@@\n-| 00:30-00:40 | Show the late joiner indicator: Portal sends the current room snapshot, including phase and Presence, instead of restarting the Match. |\n+| 00:30-00:40 | Explain that the production room uses a Portal snapshot for late joiners; do not present the local reproducible view as a live Portal connection. |\n@@\n-| 00:40-00:50 | Advance the demo Discussion and show the public conversation surface. Explain that Portal carries the live room state. |\n+| 00:40-00:50 | Advance the reproducible Discussion and show the public conversation surface. Explain that the production room uses Portal for live state. |\n@@\n-| 00:50-01:04 | Submit the private AI detection vote. Show that the vote is acknowledged without exposing other votes. |\n-| 01:04-01:16 | Submit the private Impostor vote. Explain that the two hidden roles are assigned independently. |\n-| 01:16-01:24 | Reveal the roles and vote tallies. The Agent identity and Impostor identity become visible only after voting closes. |\n-| 01:24-01:30 | Open the Replay result: public Clues, timing, votes, structured Agent behavior, and outcome are retained for the post-match view. |\n+| 00:50-01:04 | Submit the local demo's AI detection vote; the production room acknowledges private votes without exposing other votes. |\n+| 01:04-01:16 | Submit the local demo's Impostor vote. Explain that the two hidden roles are assigned independently in the production room. |\n+| 01:16-01:24 | Show the demo reveal surface and explain that production reveals roles and tallies only after voting closes. |\n+| 01:24-01:30 | Describe the persisted Replay contract; this local reproducible view does not open a Replay. |\n@@\n-## Portal explanation\n+## Portal explanation\n@@\n-Portal is the authority for each live Match room. Its standard channel carries\n-Presence, phase transitions, public Clues, private role delivery, private\n-votes, and the late-join snapshot. The browser renders that state and requests\n-actions; it does not decide outcomes. Supabase stores completed Match history,\n-Replays, and progression after the live session.\n+Portal is the authority for each live Match room. Its standard channel carries\n+Presence, phase transitions, public Clues, private role delivery, private\n+votes, and the late-join snapshot. The browser renders that state and requests\n+actions; it does not decide outcomes. Supabase stores completed Match history,\n+Replays, and progression after the live session. The reproducible recording\n+view in this branch is local demo scaffolding and must not be described as a\n+live Portal room or as an opened Replay.\n*** End Patch"})
+todowrite({"todos":[{"content":"Read project contracts and review branch commits/diff","status":"completed","priority":"high"},{"content":"Analyze changed code for correctness, security, and scope","status":"completed","priority":"high"},{"content":"Apply necessary fixes and add focused tests","status":"completed","priority":"high"},{"content":"Run verification and commit any improvements","status":"in_progress","priority":"medium"}]})
+bash(git diff --check -- src/app/round-room.tsx src/lib/submission.ts src/lib/submission.test.ts docs/hackathon-submission.md && git diff -- src/app/round-room.tsx src/lib/submission.ts src/lib/submission.test.ts docs/hackathon-submission.md)
+bash(bunx biome check src/app/round-room.tsx src/lib/submission.ts src/lib/submission.test.ts)
+bash(bun run test)
+bash(bun run typecheck)
+The focused checks now pass: 55 tests, strict typecheck, and Biome on all changed source files. The corrections keep the demo usable while making its local-only state and unavailable Replay explicit, and prevent localhost/credential-bearing links or an empty commit set from passing validation. I’m running the production build, then I’ll commit only these review fixes.
+Agent idle for 1 minute
+bash(bun run build)
+bash(git status --short)
+bash(git diff -- src/app/round-room.tsx src/lib/submission.ts src/lib/submission.test.ts docs/hackathon-submission.md)
+bash(git log --oneline -10)
+bash(git add docs/hackathon-submission.md src/app/round-room.tsx src/lib/submission.ts src/lib/submission.test.ts && git diff --cached --check && git diff --cached --stat && git commit -m "fix: clarify demo submission boundaries")
+The fixes are staged, but the commit was blocked because this workspace has no Git author identity configured. I will not change repository/global configuration; I’ll retry the requested commit with identity supplied only to that command, leaving all unrelated worktree changes untouched.
+bash(GIT_AUTHOR_NAME='OpenCode' GIT_AUTHOR_EMAIL='opencode@users.noreply.github.com' GIT_COMMITTER_NAME='OpenCode' GIT_COMMITTER_EMAIL='opencode@users.noreply.github.com' git commit -m "fix: clarify demo submission boundaries")
+bash(git show --stat --oneline --decorate HEAD && git show --check --oneline HEAD)
+bash(git status --short && git log --oneline -3)
+bash(bun test && bun run typecheck)
+todowrite({"todos":[{"content":"Read project contracts and review branch commits/diff","status":"completed","priority":"high"},{"content":"Analyze changed code for correctness, security, and scope","status":"completed","priority":"high"},{"content":"Apply necessary fixes and add focused tests","status":"completed","priority":"high"},{"content":"Run verification and commit any improvements","status":"completed","priority":"medium"}]})
+Reviewed and fixed:
+
+- Removed misleading Portal connection and snapshot claims from the local demo.
+- Disabled the non-functional Replay action and clarified documentation.
+- Hardened submission URL and commit validation.
+- Added focused tests.
+
+Verification: tests, typecheck, build, and changed-file lint pass. Full lint remains blocked by unrelated pre-existing worktree formatting changes.
+
+Committed as `5408167`.
+
+<promise>COMPLETE</promise>
+Agent stopped
+Syncing 1 commit to host
+Syncing 1 commit to host done (0.0s)
+Collecting commits
+Collecting commits done (0.1s)
+Agent signaled completion after 1 iteration(s).
+Run complete: agent finished after 1 iteration(s).

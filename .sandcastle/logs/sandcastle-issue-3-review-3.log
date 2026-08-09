@@ -1,0 +1,255 @@
+
+--- Run started: 2026-08-08T12:58:16.382Z ---
+Iteration 1/1
+Setting up sandbox
+Setting up sandbox done (0.3s)
+Agent started
+I’ll inspect the branch history and working tree first, then compare the issue changes against `CONTEXT.md`, ADRs, and coding standards before deciding whether any fixes are warranted.
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository guidance","status":"in_progress","priority":"high"},{"content":"Review changed code for correctness, security, and contract compliance","status":"pending","priority":"high"},{"content":"Add targeted fixes and tests if findings require changes","status":"pending","priority":"high"},{"content":"Run verification and commit any applied improvements","status":"pending","priority":"medium"}]})
+glob({"pattern":"docs/adr/*","path":"/home/agent/workspace"})
+bash(git diff --stat sandcastle/issue-3...HEAD && git diff --name-status sandcastle/issue-3...HEAD)
+read({"filePath":"/home/agent/workspace/CONTEXT.md"})
+read({"filePath":"/home/agent/workspace/.sandcastle/CODING_STANDARDS.md"})
+bash(git status --short --branch && git log --oneline --decorate -10)
+read({"filePath":"/home/agent/workspace/docs/adr/0003-pseudonymous-progress.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0002-independent-hidden-roles.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0001-live-game-authority.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0005-deployment-and-migrations.md"})
+bash(git show --format=fuller --no-ext-diff HEAD -- .env.example package.json src/app/page.tsx src/lib/product.test.ts src/lib/runtime-env.test.ts src/lib/public-env.ts src/lib/server-env-config.ts src/lib/server-env.ts)
+bash(git show --stat --oneline --decorate HEAD && git diff --stat main..HEAD && git diff --name-status main..HEAD)
+The target commit is isolated to authentication, migration, Supabase helpers, middleware, and one SQL migration. I’m now tracing each route and database policy end to end, with particular attention to one-time migration semantics and whether auth middleware can interfere with the live Portal flow.
+read({"filePath":"/home/agent/workspace/src/middleware.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/auth-policy.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/auth-policy.test.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/supabase/browser.ts"})
+read({"filePath":"/home/agent/workspace/supabase/migrations/20260808000000_guest_progress.sql"})
+read({"filePath":"/home/agent/workspace/src/lib/supabase/server.ts"})
+read({"filePath":"/home/agent/workspace/src/app/auth/callback/route.ts"})
+read({"filePath":"/home/agent/workspace/src/app/api/auth/guest/route.ts"})
+read({"filePath":"/home/agent/workspace/src/app/api/auth/migrate/route.ts"})
+read({"filePath":"/home/agent/workspace/src/app/api/auth/sign-in/route.ts"})
+glob({"pattern":"src/**/*.test.ts","path":"/home/agent/workspace"})
+read({"filePath":"/home/agent/workspace/package.json"})
+read({"filePath":"/home/agent/workspace/src/lib/public-env.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/server-env-config.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/server-env.ts"})
+bash(git diff main..HEAD -- src/app src/lib supabase)
+bash(bun run test && bun run typecheck)
+grep({"pattern":"migrat|guest|progress|player_match_history","path":"/home/agent/workspace","include":"*.md"})
+grep({"pattern":"player_progress|player_match_history|guest_progress_migrations|migrate_guest_progress","path":"/home/agent/workspace","include":"*.ts"})
+bash(git show HEAD^:src/app/layout.tsx >/dev/null; git log --all --oneline --decorate -- src/app/api/auth supabase/migrations)
+The review found two concrete concerns: the migration RPC accepts any guest UUID presented by an authenticated user, and sign-in builds the email callback from the request host rather than the configured public app URL. The migration also has no behavior-level route or SQL tests beyond pure classification helpers, so I’m checking available tooling and the project’s existing environment conventions before applying focused fixes.
+bash(ls)
+read({"filePath":"/home/agent/workspace/README.md"})
+read({"filePath":"/home/agent/workspace/.env.example"})
+read({"filePath":"/home/agent/workspace/src/lib/runtime-env.test.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/product.test.ts"})
+bash(git status --short --untracked-files=all)
+The direct RPC grant makes the migration bypassable outside the route, so route validation alone would not satisfy the server-authority requirement. I’ll harden the boundary by requiring proof of the guest session, restricting the migration function to the server role, and using the configured app URL for magic-link redirects.
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/app/api/auth/guest/route.ts\n@@\n-  return NextResponse.json({ user: data.user }, { status: 201 });\n+  return NextResponse.json(\n+    { user: data.user, accessToken: data.session?.access_token },\n+    { status: 201 },\n+  );\n }\n*** Update File: /home/agent/workspace/src/app/api/auth/sign-in/route.ts\n@@\n import { NextResponse } from \"next/server\";\n import { z } from \"zod\";\n \n+import { publicRuntimeConfig } from \"@/lib/public-env\";\n import { createSupabaseServerClient } from \"@/lib/supabase/server\";\n@@\n-    options: { emailRedirectTo: `${new URL(request.url).origin}/auth/callback` },\n+    options: {\n+      emailRedirectTo: new URL(\n+        \"/auth/callback\",\n+        publicRuntimeConfig.appUrl,\n+      ).toString(),\n+    },\n@@\n-    return NextResponse.json({ error: error.message }, { status: 502 });\n+    return NextResponse.json({ error: \"Unable to send sign-in email\" }, { status: 502 });\n*** Update File: /home/agent/workspace/src/lib/supabase/server.ts\n@@\n import \"server-only\";\n \n import { createServerClient } from \"@supabase/ssr\";\n+import { createClient } from \"@supabase/supabase-js\";\n@@\n export async function createSupabaseServerClient() {\n@@\n }\n+\n+export function createSupabaseAdminClient(secretKey: string) {\n+  return createClient(publicRuntimeConfig.supabaseUrl, secretKey, {\n+    auth: { autoRefreshToken: false, persistSession: false },\n+  });\n+}\n*** End Patch"})
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/app/api/auth/migrate/route.ts\n@@\n import { NextResponse } from \"next/server\";\n+import { z } from \"zod\";\n \n-import { validateGuestMigration } from \"@/lib/auth-policy\";\n+import { isGuestUser, validateGuestMigration } from \"@/lib/auth-policy\";\n+import { readServerRuntimeConfig } from \"@/lib/server-env-config\";\n import { createSupabaseServerClient } from \"@/lib/supabase/server\";\n+import { createSupabaseAdminClient } from \"@/lib/supabase/server\";\n+\n+const migrationSchema = z.object({\n+  guestUserId: z.string().trim().min(1),\n+  guestAccessToken: z.string().min(1),\n+});\n@@\n-  const body = await request.json().catch(() => null);\n-  const guestUserId = typeof body?.guestUserId === \"string\" ? body.guestUserId : \"\";\n+  const parsed = migrationSchema.safeParse(await request.json().catch(() => null));\n+  if (!parsed.success) {\n+    return NextResponse.json({ error: \"Invalid Guest migration\" }, { status: 400 });\n+  }\n+\n+  const { guestUserId, guestAccessToken } = parsed.data;\n+\n+  const source = await supabase.auth.getUser(guestAccessToken);\n+  if (\n+    !source.data.user ||\n+    !isGuestUser(source.data.user) ||\n+    source.data.user.id !== guestUserId\n+  ) {\n+    return NextResponse.json(\n+      { error: \"Guest session verification failed\" },\n+      { status: 403 },\n+    );\n+  }\n@@\n-  const { data, error } = await supabase.rpc(\"migrate_guest_progress\", {\n+  const admin = createSupabaseAdminClient(\n+    readServerRuntimeConfig().supabaseSecretKey,\n+  );\n+  const { data, error } = await admin.rpc(\"migrate_guest_progress\", {\n     source_guest_id: guestUserId.trim(),\n+    destination_player_id: authData.user.id,\n   });\n \n   if (error) {\n     const status = error.code === \"23505\" ? 409 : 502;\n-    return NextResponse.json({ error: error.message }, { status });\n+    return NextResponse.json({ error: \"Guest migration failed\" }, { status });\n*** End Patch"})
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/app/api/auth/migrate/route.ts\n@@\n-import { createSupabaseServerClient } from \"@/lib/supabase/server\";\n-import { createSupabaseAdminClient } from \"@/lib/supabase/server\";\n+import {\n+  createSupabaseAdminClient,\n+  createSupabaseServerClient,\n+} from \"@/lib/supabase/server\";\n*** Update File: /home/agent/workspace/supabase/migrations/20260808000000_guest_progress.sql\n@@\n-create or replace function public.migrate_guest_progress(source_guest_id uuid)\n+create or replace function public.migrate_guest_progress(\n+  source_guest_id uuid,\n+  destination_player_id uuid\n+)\n@@\n-  if auth.uid() is null or (select is_anonymous from auth.users where id = auth.uid()) then\n+  if (select is_anonymous from auth.users where id = destination_player_id) then\n@@\n-  if source_guest_id = auth.uid() then\n+  if source_guest_id = destination_player_id then\n@@\n-  values (source_guest_id, auth.uid());\n+  values (source_guest_id, destination_player_id);\n@@\n-        where destination_history.player_id = auth.uid()\n+        where destination_history.player_id = destination_player_id\n@@\n-  set player_id = auth.uid()\n+  set player_id = destination_player_id\n@@\n-  select auth.uid(), rounds_played, ai_detections, impostor_detections\n+  select destination_player_id, rounds_played, ai_detections, impostor_detections\n@@\n-revoke all on function public.migrate_guest_progress(uuid) from public;\n-grant execute on function public.migrate_guest_progress(uuid) to authenticated;\n+revoke all on function public.migrate_guest_progress(uuid, uuid) from public, anon, authenticated;\n+grant execute on function public.migrate_guest_progress(uuid, uuid) to service_role;\n*** End Patch"})
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/lib/auth-policy.ts\n@@\n export function isPersistentUser(user: SupabaseIdentity): boolean {\n-  return !isGuestUser(user);\n+  return user.is_anonymous === false;\n }\n*** Update File: /home/agent/workspace/src/lib/auth-policy.test.ts\n@@\n   test(\"classifies registered Supabase users as persistent Players\", () => {\n     expect(isGuestUser({ is_anonymous: false })).toBe(false);\n     expect(isPersistentUser({ is_anonymous: false })).toBe(true);\n+    expect(isPersistentUser({})).toBe(false);\n   });\n*** Update File: /home/agent/workspace/supabase/migrations/20260808000000_guest_progress.sql\n@@\n-  if (select is_anonymous from auth.users where id = destination_player_id) then\n+  if not exists (\n+    select 1\n+    from auth.users\n+    where id = destination_player_id and is_anonymous = false\n+  ) then\n*** End Patch"})
+read({"filePath":"/home/agent/workspace/supabase/migrations/20260808000000_guest_progress.sql"})
+read({"filePath":"/home/agent/workspace/src/app/api/auth/migrate/route.ts"})
+bash(npx tsc --noEmit)
+bash(npx biome check src/app/api/auth src/lib/auth-policy.ts src/lib/auth-policy.test.ts src/lib/supabase/server.ts)
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/app/api/auth/guest/route.ts\n@@\n   const current = await supabase.auth.getUser();\n \n   if (current.data.user) {\n-    return NextResponse.json({ user: current.data.user });\n+    const session = await supabase.auth.getSession();\n+    return NextResponse.json({\n+      user: current.data.user,\n+      accessToken: session.data.session?.access_token,\n+    });\n   }\n*** End Patch"})
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/app/api/auth/guest/route.ts\n@@\n import { NextResponse } from \"next/server\";\n \n+import { isGuestUser } from \"@/lib/auth-policy\";\n import { createSupabaseServerClient } from \"@/lib/supabase/server\";\n@@\n     const session = await supabase.auth.getSession();\n     return NextResponse.json({\n       user: current.data.user,\n-      accessToken: session.data.session?.access_token,\n+      accessToken: isGuestUser(current.data.user)\n+        ? session.data.session?.access_token\n+        : undefined,\n     });\n*** End Patch"})
+bash(ls node_modules/.bin)
+bash(git diff --check main..HEAD -- src/app/api/auth src/lib supabase/migrations)
+bash(git diff --stat main..HEAD && git diff --stat -- src/app/api/auth src/lib/auth-policy.ts src/lib/auth-policy.test.ts src/lib/supabase/server.ts supabase/migrations/20260808000000_guest_progress.sql)
+The hardening changes are in place, including preserving the guest access token when the guest endpoint is called repeatedly without exposing persistent tokens. The environment lacks Bun and installed package binaries, so I’m doing static diff checks and a final review of the exact staged scope before committing only the issue-related files.
+grep({"pattern":"auth\\.(uid|getUser)|grant execute|migrate_guest_progress|emailRedirectTo|accessToken","path":"/home/agent/workspace/src/app/api/auth","include":"*.ts"})
+bash(git diff --name-only -- src/app/api/auth src/lib/auth-policy.ts src/lib/auth-policy.test.ts src/lib/supabase/server.ts supabase/migrations/20260808000000_guest_progress.sql)
+bash(git diff --check -- src/app/api/auth/guest/route.ts src/app/api/auth/migrate/route.ts src/app/api/auth/sign-in/route.ts src/lib/auth-policy.ts src/lib/auth-policy.test.ts src/lib/supabase/server.ts supabase/migrations/20260808000000_guest_progress.sql)
+bash(git diff -- src/app/api/auth/guest/route.ts src/app/api/auth/migrate/route.ts src/app/api/auth/sign-in/route.ts src/lib/auth-policy.ts src/lib/auth-policy.test.ts src/lib/supabase/server.ts supabase/migrations/20260808000000_guest_progress.sql)
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/app/api/auth/migrate/route.ts\n@@\n   const parsed = migrationSchema.safeParse(await request.json().catch(() => null));\n   if (!parsed.success) {\n-    return NextResponse.json({ error: \"Invalid Guest migration\" }, { status: 400 });\n+    return NextResponse.json(\n+      { error: \"Invalid Guest migration\" },\n+      { status: 400 },\n+    );\n*** Update File: /home/agent/workspace/src/app/api/auth/sign-in/route.ts\n@@\n   });\n \n   if (error) {\n-    return NextResponse.json({ error: \"Unable to send sign-in email\" }, { status: 502 });\n+    return NextResponse.json(\n+      { error: \"Unable to send sign-in email\" },\n+      { status: 502 },\n+    );\n*** Update File: /home/agent/workspace/supabase/migrations/20260808000000_guest_progress.sql\n@@\n       select 1\n       from public.player_match_history destination_history\n-        where destination_history.player_id = destination_player_id\n-        and destination_history.match_id = source_history.match_id\n+      where destination_history.player_id = destination_player_id\n+        and destination_history.match_id = source_history.match_id\n*** End Patch"})
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository guidance","status":"completed","priority":"high"},{"content":"Review changed code for correctness, security, and contract compliance","status":"completed","priority":"high"},{"content":"Add targeted fixes and tests if findings require changes","status":"completed","priority":"high"},{"content":"Run verification and commit any applied improvements","status":"in_progress","priority":"medium"}]})
+bash(command -v node; command -v corepack; command -v bun; git status --short --branch)
+bash(git diff --check && git diff --name-only)
+bash(git log --oneline -10 && git diff --stat)
+bash(git add src/app/api/auth/guest/route.ts src/app/api/auth/migrate/route.ts src/app/api/auth/sign-in/route.ts src/lib/auth-policy.ts src/lib/auth-policy.test.ts src/lib/supabase/server.ts supabase/migrations/20260808000000_guest_progress.sql && git status --short --branch && git diff --cached --check && git diff --cached --stat)
+bash(git commit -m "fix: harden guest progress migration")
+Static checks on the focused files pass, but the required verification commands cannot run because Bun and the project’s local binaries are unavailable. The fixes are staged; the commit is blocked by missing Git author configuration, and I will leave unrelated pre-existing worktree changes untouched.
+bash(git diff --cached -- src/app/api/auth/migrate/route.ts supabase/migrations/20260808000000_guest_progress.sql)
+bash(git diff --cached --check && git diff --cached --name-status)
+bash(git status --short --branch)
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository guidance","status":"completed","priority":"high"},{"content":"Review changed code for correctness, security, and contract compliance","status":"completed","priority":"high"},{"content":"Add targeted fixes and tests if findings require changes","status":"completed","priority":"high"},{"content":"Run verification and commit any applied improvements","status":"completed","priority":"medium"}]})
+Review completed. Applied and staged security fixes for guest migration, callback URL handling, and persistent-user classification.
+
+Verification was blocked because Bun is unavailable. Commit was blocked by missing Git author configuration. Unrelated worktree changes were untouched.
+
+<promise>COMPLETE</promise>
+Agent stopped
+No commits to sync out
+No commits to sync out done (0.0s)
+Collecting commits
+Collecting commits done (0.1s)
+Agent signaled completion after 1 iteration(s).
+Run complete: agent finished after 1 iteration(s).
+
+--- Run started: 2026-08-08T13:11:38.418Z ---
+Iteration 1/1
+Setting up sandbox
+Setting up sandbox done (0.4s)
+Agent started
+I’ll inspect the target branch’s commits and working tree, then compare the diff against the project contracts and standards before deciding whether any corrective changes are needed.
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository status","status":"in_progress","priority":"high"},{"content":"Read CONTEXT, ADRs, and coding standards relevant to changes","status":"pending","priority":"high"},{"content":"Review implementation for security, authority, races, and tests","status":"pending","priority":"high"},{"content":"Apply focused fixes if required and run verification","status":"pending","priority":"high"},{"content":"Report review outcome and completion marker","status":"pending","priority":"medium"}]})
+glob({"pattern":"**/*","path":"/home/agent/workspace/.sandcastle"})
+glob({"pattern":"docs/adr/*","path":"/home/agent/workspace"})
+read({"filePath":"/home/agent/workspace/CONTEXT.md"})
+read({"filePath":"/home/agent/workspace/.sandcastle/CODING_STANDARDS.md"})
+bash(git status --short --branch && git log --oneline --decorate -10 && git diff --stat sandcastle/issue-3...HEAD && git diff --name-status sandcastle/issue-3...HEAD)
+The worktree is on `sandcastle/issue-3`, with two feature commits at its tip, but it also contains broad pre-existing modifications. I’m isolating the feature commits from the branch base and checking the identity/progress contracts before reviewing behavior.
+glob({"pattern":"src/**/*","path":"/home/agent/workspace"})
+read({"filePath":"/home/agent/workspace/docs/adr/0003-pseudonymous-progress.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0001-live-game-authority.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0005-deployment-and-migrations.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0002-independent-hidden-roles.md"})
+bash(git show --stat --oneline c561ed0 && git show --stat --oneline 793e304 && git diff 95a1e67..HEAD --)
+read({"filePath":"/home/agent/workspace/src/app/api/auth/migrate/route.ts"})
+read({"filePath":"/home/agent/workspace/package.json"})
+read({"filePath":"/home/agent/workspace/src/lib/public-env.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/server-env-config.ts"})
+read({"filePath":"/home/agent/workspace/supabase/migrations/20260808000000_guest_progress.sql"})
+bash(git diff --check 95a1e67..HEAD && git show --format=fuller --no-ext-diff 793e304 -- src/app/api/auth/migrate/route.ts supabase/migrations/20260808000000_guest_progress.sql)
+The main security boundary is present: migration now verifies possession of the guest JWT, requires a persistent destination, and invokes a service-role-only RPC. I’m validating the SQL transaction semantics and running the repository checks now, with particular attention to whether the route and migration tests cover the claimed exactly-once behavior.
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository status","status":"completed","priority":"high"},{"content":"Read CONTEXT, ADRs, and coding standards relevant to changes","status":"completed","priority":"high"},{"content":"Review implementation for security, authority, races, and tests","status":"in_progress","priority":"high"},{"content":"Apply focused fixes if required and run verification","status":"pending","priority":"high"},{"content":"Report review outcome and completion marker","status":"pending","priority":"medium"}]})
+bash(bun run lint)
+bash(bun run typecheck)
+bash(bun run build)
+bash(bun run test)
+grep({"pattern":"migrate_guest_progress|guestAccessToken|accessToken|player_progress|player_match_history","path":"/home/agent/workspace","include":"*.{ts,tsx,sql,md}"})
+bash(git log --all --oneline --decorate --graph -15)
+The review found one concrete standards violation: `/api/auth/guest` returns a bearer access token in JSON, exposing a credential to browser JavaScript, while the project explicitly requires secrets to stay out of the browser. I’m preserving the migration flow by keeping the guest token in an HttpOnly cookie and removing it from request/response JSON.
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/app/api/auth/guest/route.ts\n@@\n export async function POST() {\n   const supabase = await createSupabaseServerClient();\n   const current = await supabase.auth.getUser();\n \n   if (current.data.user) {\n     const session = await supabase.auth.getSession();\n-    return NextResponse.json({\n-      user: current.data.user,\n-      accessToken: isGuestUser(current.data.user)\n-        ? session.data.session?.access_token\n-        : undefined,\n-    });\n+    const response = NextResponse.json({ user: current.data.user });\n+    const accessToken = isGuestUser(current.data.user)\n+      ? session.data.session?.access_token\n+      : undefined;\n+    if (accessToken) {\n+      response.cookies.set(\"impostoi_guest_access_token\", accessToken, {\n+        httpOnly: true,\n+        sameSite: \"lax\",\n+        secure: process.env.NODE_ENV === \"production\",\n+        path: \"/\",\n+      });\n+    }\n+    return response;\n   }\n@@\n-  return NextResponse.json(\n-    { user: data.user, accessToken: data.session?.access_token },\n-    { status: 201 },\n-  );\n+  const response = NextResponse.json({ user: data.user }, { status: 201 });\n+  if (data.session?.access_token) {\n+    response.cookies.set(\n+      \"impostoi_guest_access_token\",\n+      data.session.access_token,\n+      {\n+        httpOnly: true,\n+        sameSite: \"lax\",\n+        secure: process.env.NODE_ENV === \"production\",\n+        path: \"/\",\n+      },\n+    );\n+  }\n+  return response;\n }\n*** Update File: /home/agent/workspace/src/app/api/auth/migrate/route.ts\n@@\n import { NextResponse } from \"next/server\";\n+import { cookies } from \"next/headers\";\n import { z } from \"zod\";\n@@\n const migrationSchema = z.object({\n   guestUserId: z.string().trim().min(1),\n-  guestAccessToken: z.string().min(1),\n });\n@@\n-  const { guestUserId, guestAccessToken } = parsed.data;\n+  const { guestUserId } = parsed.data;\n+  const guestAccessToken = (await cookies()).get(\n+    \"impostoi_guest_access_token\",\n+  )?.value;\n+  if (!guestAccessToken) {\n+    return NextResponse.json(\n+      { error: \"Guest session verification failed\" },\n+      { status: 403 },\n+    );\n+  }\n \n   const source = await supabase.auth.getUser(guestAccessToken);\n@@\n-  return NextResponse.json({\n+  const response = NextResponse.json({\n     migratedMatches: data?.[0]?.migrated_matches ?? 0,\n   });\n+  response.cookies.delete(\"impostoi_guest_access_token\");\n+  return response;\n }\n*** Update File: /home/agent/workspace/src/lib/progress-migration-contract.test.ts\n@@\n test(\"guest progress migration removes the legacy RPC overload\", () => {\n@@\n });\n+\n+test(\"guest access tokens are not returned by the guest endpoint\", () => {\n+  const guestRoute = readFileSync(\n+    join(process.cwd(), \"src/app/api/auth/guest/route.ts\"),\n+    \"utf8\",\n+  );\n+  expect(guestRoute).not.toContain(\"accessToken:\");\n+  expect(guestRoute).toContain(\"httpOnly: true\");\n+});\n*** End Patch"})
+read({"filePath":"/home/agent/workspace/src/app/api/auth/guest/route.ts"})
+read({"filePath":"/home/agent/workspace/src/app/api/auth/migrate/route.ts"})
+bash(command -v node; command -v npm; command -v bun; git diff --check; git diff -- src/app/api/auth/guest/route.ts src/app/api/auth/migrate/route.ts src/lib/progress-migration-contract.test.ts)
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/app/api/auth/guest/route.ts\n@@\n-import { NextResponse } from \"next/server\";\n+import { NextResponse } from \"next/server\";\n@@\n   const { data, error } = await supabase.auth.signInAnonymously();\n   if (error) {\n-    return NextResponse.json({ error: error.message }, { status: 502 });\n+    return NextResponse.json(\n+      { error: \"Unable to start Guest session\" },\n+      { status: 502 },\n+    );\n   }\n*** Update File: /home/agent/workspace/src/app/api/auth/migrate/route.ts\n@@\n-import { NextResponse } from \"next/server\";\n import { cookies } from \"next/headers\";\n+import { NextResponse } from \"next/server\";\n*** End Patch"})
+The corrective change is limited to the guest-auth boundary: the token is now HttpOnly, migration consumes it server-side and clears it after success, and provider error text is no longer returned. The repository’s required checks cannot run because `bun` is not installed in this environment; I’m doing the final diff review and committing only these review changes.
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository status","status":"completed","priority":"high"},{"content":"Read CONTEXT, ADRs, and coding standards relevant to changes","status":"completed","priority":"high"},{"content":"Review implementation for security, authority, and races","status":"completed","priority":"high"},{"content":"Apply focused fixes if required and run verification","status":"in_progress","priority":"high"},{"content":"Report review outcome and completion marker","status":"pending","priority":"medium"}]})
+bash(git log --oneline -10)
+bash(git status --short && git diff -- src/app/api/auth/guest/route.ts src/app/api/auth/migrate/route.ts src/lib/progress-migration-contract.test.ts && git diff --check -- src/app/api/auth/guest/route.ts src/app/api/auth/migrate/route.ts src/lib/progress-migration-contract.test.ts)
+bash(git add src/app/api/auth/guest/route.ts src/app/api/auth/migrate/route.ts src/lib/progress-migration-contract.test.ts && git commit -m "fix: keep guest access tokens server-side")
+The fix is staged, but the commit was blocked because this checkout has no Git author identity configured. I’m retrying with commit-local environment identity only, without changing repository or global Git configuration.
+bash(GIT_AUTHOR_NAME="OpenCode Review" GIT_AUTHOR_EMAIL="opencode-review@localhost" GIT_COMMITTER_NAME="OpenCode Review" GIT_COMMITTER_EMAIL="opencode-review@localhost" git commit -m "fix: keep guest access tokens server-side")
+bash(git show --format= --name-only HEAD)
+bash(git status --short --branch && git show --stat --oneline HEAD && git diff --check HEAD^ HEAD)
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository status","status":"completed","priority":"high"},{"content":"Read CONTEXT, ADRs, and coding standards relevant to changes","status":"completed","priority":"high"},{"content":"Review implementation for security, authority, and races","status":"completed","priority":"high"},{"content":"Apply focused fixes if required and run verification","status":"completed","priority":"high"},{"content":"Report review outcome and completion marker","status":"completed","priority":"medium"}]})
+Reviewed and fixed a credential exposure: guest access tokens are now stored server-side in HttpOnly cookies, removed from JSON, and cleared after migration.
+
+Committed as `cb30df8`.
+
+Verification commands could not run because `bun` is unavailable. `<promise>COMPLETE</promise>`
+Agent stopped
+Syncing 1 commit to host
+Syncing 1 commit to host done (0.0s)
+Collecting commits
+Collecting commits done (0.2s)
+Agent signaled completion after 1 iteration(s).
+Run complete: agent finished after 1 iteration(s).
+
+--- Run started: 2026-08-08T13:26:15.900Z ---
+Iteration 1/1
+Setting up sandbox
+Setting up sandbox done (0.3s)
+Agent started
+I’ll inspect the target branch history and worktree first, then compare the implementation against the domain docs and coding standards. I’ll make only review-driven fixes, verify them with the relevant checks, and commit any necessary changes.
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository state","status":"in_progress","priority":"high"},{"content":"Read domain context, ADRs, and coding standards","status":"pending","priority":"high"},{"content":"Review changed code for correctness and security gaps","status":"pending","priority":"high"},{"content":"Apply focused fixes and add tests if needed","status":"pending","priority":"high"},{"content":"Run verification and commit necessary improvements","status":"pending","priority":"high"}]})
+glob({"pattern":"docs/adr/*","path":"/home/agent/workspace"})
+glob({"pattern":"**/*","path":"/home/agent/workspace/.sandcastle"})
+glob({"pattern":"CONTEXT.md","path":"/home/agent/workspace"})
+bash(git branch --all --no-color)
+bash(git status --short --branch && git log --oneline --decorate -10)
+read({"filePath":"/home/agent/workspace/CONTEXT.md"})
+read({"filePath":"/home/agent/workspace/.sandcastle/CODING_STANDARDS.md"})
+bash(git log --format=fuller --reverse main..HEAD)
+read({"filePath":"/home/agent/workspace/docs/adr/0005-deployment-and-migrations.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0003-pseudonymous-progress.md"})
+bash(git diff --stat main...HEAD && git diff --name-status main...HEAD)
+bash(git diff --stat && git diff --name-status)
+read({"filePath":"/home/agent/workspace/docs/adr/0001-live-game-authority.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0002-independent-hidden-roles.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0004-agent-runtime-and-benchmarking.md"})
+read({"filePath":"/home/agent/workspace/src/app/api/auth/guest/route.ts"})
+read({"filePath":"/home/agent/workspace/src/app/api/auth/migrate/route.ts"})
+read({"filePath":"/home/agent/workspace/src/app/api/auth/sign-in/route.ts"})
+read({"filePath":"/home/agent/workspace/src/app/auth/callback/route.ts"})
+read({"filePath":"/home/agent/workspace/src/middleware.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/auth-policy.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/auth-route-contract.test.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/progress-migration-contract.test.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/auth-policy.test.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/supabase/browser.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/supabase/server.ts"})
+read({"filePath":"/home/agent/workspace/supabase/migrations/20260808000000_guest_progress.sql"})
+grep({"pattern":"guest|Guest|migration|issue-3","path":"/home/agent/workspace/docs"})
+read({"filePath":"/home/agent/workspace/package.json"})
+read({"filePath":"/home/agent/workspace/src/lib/public-env.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/server-env-config.ts"})
+bash(git show --stat --oneline c561ed0 793e304 cb30df8 b0069ab && git diff main...HEAD -- src/app/api/auth src/lib supabase/migrations src/middleware.ts)
+bash(git diff --ignore-space-at-eol --stat && git diff --ignore-space-at-eol -- .env.example src/app/api/auth/guest/route.ts | head -200)
+The committed change is narrowly scoped to guest authentication and one-time progress migration. The main risk area is the migration boundary: the route uses a privileged RPC, so I’m checking its input validation, transaction behavior, RLS/grants, and whether the tests exercise behavior rather than only source-text contracts.
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository state","status":"completed","priority":"high"},{"content":"Read domain context, ADRs, and coding standards","status":"completed","priority":"high"},{"content":"Review changed code for correctness and security gaps","status":"in_progress","priority":"high"},{"content":"Apply focused fixes and add tests if needed","status":"pending","priority":"high"},{"content":"Run verification and commit necessary improvements","status":"pending","priority":"high"}]})
+bash(git ls-tree -r --name-only main | rg 'supabase|auth|middleware|progress')
+bash(bun test)
+bash(git show main:CONTEXT.md && git show main:docs/adr/0003-pseudonymous-progress.md)
+bash(bun run lint)
+bash(bun run typecheck)
+I found two concrete issues worth fixing: the migration route accepts non-UUID identifiers and turns client input errors into a backend failure, and the server-only guest token is not refreshed when Supabase refreshes the guest session, so a long-lived Guest can lose migration eligibility after token expiry. I’ll address both without changing the authority model, and add contract coverage for the protections.
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/app/api/auth/migrate/route.ts\n@@\n const migrationSchema = z.object({\n-  guestUserId: z.string().trim().min(1),\n+  guestUserId: z.uuid(),\n });\n*** Update File: /home/agent/workspace/src/middleware.ts\n@@\n import { createServerClient } from \"@supabase/ssr\";\n import { NextResponse, type NextRequest } from \"next/server\";\n \n+import { isGuestUser } from \"@/lib/auth-policy\";\n import { publicRuntimeConfig } from \"@/lib/public-env\";\n@@\n-  await supabase.auth.getUser();\n+  const { data } = await supabase.auth.getUser();\n+  if (data.user && isGuestUser(data.user)) {\n+    const { data: sessionData } = await supabase.auth.getSession();\n+    const accessToken = sessionData.session?.access_token;\n+    if (accessToken) {\n+      response.cookies.set(\"impostoi_guest_access_token\", accessToken, {\n+        httpOnly: true,\n+        sameSite: \"lax\",\n+        secure: process.env.NODE_ENV === \"production\",\n+        path: \"/\",\n+      });\n+    }\n+  }\n   return response;\n }\n*** Update File: /home/agent/workspace/src/lib/auth-route-contract.test.ts\n@@\n test(\"migration verifies both identities before invoking the privileged RPC\", () => {\n   const route = readRoute(\"src/app/api/auth/migrate/route.ts\");\n \n+  expect(route).toContain(\"guestUserId: z.uuid()\");\n   expect(route).toContain(\"status: 401\");\n@@\n   expect(route).toContain(\"response.cookies.delete\");\n });\n+\n+test(\"middleware refreshes the server-only Guest token with Supabase sessions\", () => {\n+  const middleware = readRoute(\"src/middleware.ts\");\n+\n+  expect(middleware).toContain(\"isGuestUser(data.user)\");\n+  expect(middleware).toContain(\"sessionData.session?.access_token\");\n+  expect(middleware).toContain('response.cookies.set(\"impostoi_guest_access_token\"');\n+  expect(middleware).toContain(\"httpOnly: true\");\n+});\n*** End Patch"})
+bash(bun test)
+bash(git diff -- src/app/api/auth/migrate/route.ts src/middleware.ts src/lib/auth-route-contract.test.ts && git status --short)
+bash(bun run typecheck)
+The targeted tests and typecheck pass. The worktree has pre-existing line-ending-only modifications across the repository, so I’m normalizing only the three files I changed before reviewing the staged diff; this avoids bundling unrelated worktree noise into the review commit.
+bash(bunx biome format --write src/app/api/auth/migrate/route.ts src/middleware.ts src/lib/auth-route-contract.test.ts)
+bash(git diff --check -- src/app/api/auth/migrate/route.ts src/middleware.ts src/lib/auth-route-contract.test.ts)
+bash(git diff --stat -- src/app/api/auth/migrate/route.ts src/middleware.ts src/lib/auth-route-contract.test.ts && git diff -- src/app/api/auth/migrate/route.ts src/middleware.ts src/lib/auth-route-contract.test.ts)
+bash(bunx biome check src/app/api/auth/migrate/route.ts src/middleware.ts src/lib/auth-route-contract.test.ts)
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/middleware.ts\n@@\n-import { NextResponse, type NextRequest } from \"next/server\";\n+import { type NextRequest, NextResponse } from \"next/server\";\n*** End Patch"})
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository state","status":"completed","priority":"high"},{"content":"Read domain context, ADRs, and coding standards","status":"completed","priority":"high"},{"content":"Review changed code for correctness and security gaps","status":"completed","priority":"high"},{"content":"Apply focused fixes and add tests if needed","status":"completed","priority":"high"},{"content":"Run verification and commit necessary improvements","status":"in_progress","priority":"high"}]})
+The fixes are now isolated to the migration validator, auth-refresh middleware, and their tests. The focused Biome check is clean; I’m running the full test/build checks next, then I’ll stage and commit only these review changes because the rest of the worktree contains unrelated pre-existing modifications.
+bash(bun test)
+bash(bunx biome check src/app/api/auth/migrate/route.ts src/middleware.ts src/lib/auth-route-contract.test.ts)
+bash(git diff --check && git diff --stat -- src/app/api/auth/migrate/route.ts src/middleware.ts src/lib/auth-route-contract.test.ts)
+bash(bun run typecheck)
+Agent idle for 1 minute
+bash(bun run build)
+All functional checks pass: 13 tests, typecheck, production build, and focused lint. The repository-wide lint/diff checks still report the pre-existing CRLF changes in unrelated files; I will not modify those. I’m staging only the three review fixes now.
+bash(git log --oneline -10)
+bash(git diff -- src/app/api/auth/migrate/route.ts src/middleware.ts src/lib/auth-route-contract.test.ts)
+bash(git status --short --branch)
+bash(git add src/app/api/auth/migrate/route.ts src/middleware.ts src/lib/auth-route-contract.test.ts && git diff --cached --check && git diff --cached --stat && git diff --cached && git commit -m "fix: harden guest migration refresh")
+The commit was blocked only because this checkout has no Git author configured; no files were changed by the failed attempt. I’ll commit with repository-local command-scoped identity settings, without changing Git configuration.
+bash(git log --oneline -3)
+bash(git diff --cached --stat && git diff --cached --check)
+bash(git status --short --branch)
+bash(git -c user.name="OpenCode Review" -c user.email="opencode-review@localhost" commit -m "fix: harden guest migration refresh")
+bash(git show --stat --oneline --decorate HEAD && git show --check --oneline HEAD)
+bash(git status --short --branch && git log --oneline -2)
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository state","status":"completed","priority":"high"},{"content":"Read domain context, ADRs, and coding standards","status":"completed","priority":"high"},{"content":"Review changed code for correctness and security gaps","status":"completed","priority":"high"},{"content":"Apply focused fixes and add tests if needed","status":"completed","priority":"high"},{"content":"Run verification and commit necessary improvements","status":"completed","priority":"high"}]})
+Reviewed and hardened branch `sandcastle/issue-3`.
+
+Changes committed as `6bc71e5`:
+- Validate Guest IDs as UUIDs.
+- Refresh server-only Guest tokens after Supabase session refresh.
+- Added contract tests.
+
+Verification passed:
+- 13 tests
+- Typecheck
+- Production build
+- Focused lint
+
+Repository-wide lint remains affected by pre-existing unrelated line-ending changes.
+
+<promise>COMPLETE</promise>
+Agent stopped
+Syncing 1 commit to host
+Syncing 1 commit to host done (0.0s)
+Collecting commits
+Collecting commits done (0.2s)
+Agent signaled completion after 1 iteration(s).
+Run complete: agent finished after 1 iteration(s).

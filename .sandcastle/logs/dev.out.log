@@ -1,0 +1,37 @@
+▲ Next.js 16.2.11 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://100.64.169.74:3000
+- Environments: .env
+✓ Ready in 3.7s
+○ Compiling middleware ...
+
+○ Compiling /_not-found/page ...
+ GET / 200 in 7.2s (next.js: 6.9s, proxy.ts: 4ms, application-code: 254ms)
+✓ Finished filesystem cache database compaction in 31.2s
+ GET / 200 in 51ms (next.js: 6ms, proxy.ts: 6ms, application-code: 39ms)
+ GET / 200 in 81ms (next.js: 9ms, proxy.ts: 7ms, application-code: 66ms)
+✓ Compiled in 440ms
+ GET / 200 in 364ms (next.js: 126ms, proxy.ts: 100ms, application-code: 137ms)
+ GET / 200 in 121ms (next.js: 10ms, proxy.ts: 10ms, application-code: 100ms)
+ GET / 200 in 99ms (next.js: 10ms, proxy.ts: 9ms, application-code: 80ms)
+ GET / 200 in 218ms (next.js: 6ms, proxy.ts: 10ms, application-code: 201ms)
+ GET / 200 in 91ms (next.js: 11ms, proxy.ts: 26ms, application-code: 54ms)
+✓ Compiled in 310ms
+ GET / 200 in 165ms (next.js: 84ms, proxy.ts: 30ms, application-code: 52ms)
+ GET / 200 in 32ms (next.js: 7ms, proxy.ts: 6ms, application-code: 19ms)
+✓ Compiled in 48ms
+ GET / 200 in 132ms (next.js: 69ms, proxy.ts: 23ms, application-code: 40ms)
+ GET / 200 in 25ms (next.js: 3ms, proxy.ts: 5ms, application-code: 16ms)
+✓ Compiled in 48ms
+ GET / 200 in 129ms (next.js: 54ms, proxy.ts: 20ms, application-code: 55ms)
+ GET / 200 in 42ms (next.js: 5ms, proxy.ts: 4ms, application-code: 33ms)
+ GET / 200 in 111ms (next.js: 4ms, proxy.ts: 6ms, application-code: 102ms)
+  Reload env: .env
+✓ Compiled in 125ms
+ GET / 200 in 273ms (next.js: 107ms, proxy.ts: 24ms, application-code: 141ms)
+ GET / 200 in 136ms (next.js: 50ms, proxy.ts: 30ms, application-code: 56ms)
+ GET / 200 in 39ms (next.js: 20ms, proxy.ts: 5ms, application-code: 15ms)
+ GET / 200 in 42ms (next.js: 8ms, proxy.ts: 5ms, application-code: 29ms)
+  Reload env: .env
+ GET / 200 in 126ms (next.js: 61ms, proxy.ts: 23ms, application-code: 42ms)
+[?25h

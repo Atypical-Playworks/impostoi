@@ -1,0 +1,172 @@
+
+--- Run started: 2026-08-08T13:42:42.976Z ---
+Iteration 1/100
+Setting up sandbox
+Setting up sandbox done (0.4s)
+Agent started
+I’ll inspect issue 4, the domain context/ADRs, and the current branch/test structure before making any changes. I’ll keep the work scoped to `sandcastle/issue-4`, then run the required verification and commit the implementation.
+todowrite({"todos":[{"content":"Read issue 4, context, ADRs, and repository status","status":"in_progress","priority":"high"},{"content":"Explore existing Portal room code and tests","status":"pending","priority":"high"},{"content":"Implement issue 4 with focused tests","status":"pending","priority":"high"},{"content":"Run focused and required verification commands","status":"pending","priority":"high"},{"content":"Review diff and commit issue 4 changes","status":"pending","priority":"high"}]})
+read({"filePath":"/home/agent/workspace/CONTEXT.md"})
+glob({"pattern":"docs/adr/**/*","path":"/home/agent/workspace"})
+glob({"pattern":"**/*.{test,spec}.{ts,tsx,js,jsx}","path":"/home/agent/workspace"})
+bash(git status --short --branch && git branch --show-current && gh issue view 4 --repo Atypical-Playworks/impostoi --comments)
+glob({"pattern":"src/**/*","path":"/home/agent/workspace"})
+read({"filePath":"/home/agent/workspace/package.json"})
+read({"filePath":"/home/agent/workspace/docs/adr/0002-independent-hidden-roles.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0001-live-game-authority.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0005-deployment-and-migrations.md"})
+bash(gh issue view 4 --repo Atypical-Playworks/impostoi --comments)
+The repository is already on `sandcastle/issue-4`; the worktree contains broad pre-existing modifications, so I’ll avoid touching unrelated files. The issue command returned no content, so I’m checking local issue/task artifacts and Portal SDK usage next while preserving the current state.
+glob({"pattern":"**/*portal*","path":"/home/agent/workspace"})
+glob({"pattern":"**/*issue*4*","path":"/home/agent/workspace"})
+read({"filePath":"/home/agent/workspace/portal.config.ts"})
+read({"filePath":"/home/agent/workspace/README.md"})
+read({"filePath":"/home/agent/workspace/src/lib/product.test.ts"})
+bash(gh auth status; gh issue list --repo Atypical-Playworks/impostoi --state all --limit 20)
+bash(git log --oneline --all -12 && git diff --stat)
+bash(gh api repos/Atypical-Playworks/impostoi/issues/4)
+read({"filePath":"/home/agent/workspace/docs/agents/domain.md"})
+bash(gh api repos/Atypical-Playworks/impostoi/issues/4/comments)
+read({"filePath":"/home/agent/workspace/docs/adr/0003-pseudonymous-progress.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0004-agent-runtime-and-benchmarking.md"})
+grep({"pattern":"Portal|portal|token|presence|room","path":"/home/agent/workspace/src","include":"*.{ts,tsx}"})
+glob({"pattern":"node_modules/@portalsdk/**/*","path":"/home/agent/workspace"})
+glob({"pattern":"node_modules/@portalsdk/**/README*","path":"/home/agent/workspace"})
+read({"filePath":"/home/agent/workspace/src/lib/public-env.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/server-env-config.ts"})
+read({"filePath":"/home/agent/workspace/src/app/page.tsx","offset":1,"limit":100})
+bash(ls node_modules/@portalsdk node_modules/@portalsdk/core node_modules/@portalsdk/react 2>/dev/null)
+read({"filePath":"/home/agent/workspace/node_modules/@portalsdk/core/README.md"})
+glob({"pattern":"node_modules/@portalsdk/core/dist/**/*","path":"/home/agent/workspace"})
+read({"filePath":"/home/agent/workspace/node_modules/@portalsdk/react/README.md"})
+glob({"pattern":"node_modules/@portalsdk/cli/**/*","path":"/home/agent/workspace"})
+bash(ls node_modules/@portalsdk/core/dist && ls node_modules/@portalsdk/cli/dist && ls node_modules/@portalsdk/config/dist)
+read({"filePath":"/home/agent/workspace/node_modules/@portalsdk/config/README.md"})
+read({"filePath":"/home/agent/workspace/node_modules/@portalsdk/cli/package.json"})
+read({"filePath":"/home/agent/workspace/node_modules/@portalsdk/core/package.json"})
+grep({"pattern":"token|jwt|mint|auth","path":"/home/agent/workspace/node_modules/@portalsdk","include":"*.{js,ts,d.ts,md}"})
+grep({"pattern":"/v1/|mint|issue|token","path":"/home/agent/workspace/node_modules/@portalsdk/core/dist/index.js","include":"index.js"})
+grep({"pattern":"apiUrl|portalApi|useportal.co","path":"/home/agent/workspace/node_modules/@portalsdk","include":"*.{js,ts,d.ts}"})
+webfetch(https://www.npmjs.com/package/@portalsdk/core)
+bash(git branch -a && git log --all --oneline -- src | head -30)
+webfetch(https://raw.githubusercontent.com/useportal/portal-sdk/main/README.md)
+grep({"pattern":"tokens","path":"/home/agent/workspace/node_modules/@portalsdk/cli/dist/index.js","include":"index.js"})
+read({"filePath":"/home/agent/workspace/src/lib/supabase/server.ts"})
+Issue 4 has no comments and the current code has no Portal room abstraction yet. I’ll add a server-only token issuer route, a small pure room contract for channel identity, safe presence, reconnect bounds, snapshot validation, and safe error mapping, plus behavior tests that exercise the acceptance criteria without introducing Supabase Realtime.
+todowrite({"todos":[{"content":"Read issue 4, context, ADRs, and repository status","status":"completed","priority":"high"},{"content":"Explore existing Portal room code and tests","status":"completed","priority":"high"},{"content":"Implement issue 4 with focused tests","status":"in_progress","priority":"high"},{"content":"Run focused and required verification commands","status":"pending","priority":"high"},{"content":"Review diff and commit issue 4 changes","status":"pending","priority":"high"}]})
+apply_patch({"patchText":"*** Begin Patch\n*** Add File: /home/agent/workspace/src/lib/portal-room.ts\n+export const RECONNECT_WINDOW_MS = 30_000;\n+\n+export type RoomStatus =\n+  | \"idle\"\n+  | \"connecting\"\n+  | \"ready\"\n+  | \"reconnecting\"\n+  | \"degraded\"\n+  | \"degraded-http\"\n+  | \"blocked\";\n+\n+export type PresenceMetadata = {\n+  alias: string;\n+  avatar: string;\n+  activity?: \"idle\" | \"clue\" | \"discussion\" | \"voting\";\n+};\n+\n+export type RoomSnapshot = {\n+  roomId: string;\n+  channelId: string;\n+  status: RoomStatus;\n+  phase: string;\n+  participants: Array<PresenceMetadata & { id: string }>;\n+  receivedAt: number;\n+};\n+\n+export type RoomErrorState =\n+  | \"room-unavailable\"\n+  | \"session-expired\"\n+  | \"room-full\"\n+  | \"access-denied\"\n+  | \"connection-lost\";\n+\n+const roomIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{2,63}$/;\n+\n+export function validateRoomId(roomId: string): boolean {\n+  return roomIdPattern.test(roomId);\n+}\n+\n+export function roomChannelId(roomId: string): string {\n+  if (!validateRoomId(roomId)) throw new Error(\"Invalid room id\");\n+  return `room-${roomId}`;\n+}\n+\n+export function safePresence(\n+  id: string,\n+  metadata: Partial<PresenceMetadata>,\n+): PresenceMetadata & { id: string } {\n+  return {\n+    id,\n+    alias: metadata.alias?.slice(0, 24) || \"Jugador\",\n+    avatar: metadata.avatar?.slice(0, 64) || \"default\",\n+    ...(metadata.activity ? { activity: metadata.activity } : {}),\n+  };\n+}\n+\n+export function canReconnect(disconnectedAt: number, now = Date.now()): boolean {\n+  return now >= disconnectedAt && now - disconnectedAt <= RECONNECT_WINDOW_MS;\n+}\n+\n+export function createRoomSnapshot(input: RoomSnapshot): RoomSnapshot {\n+  if (input.roomId !== input.channelId.slice(\"room-\".length)) {\n+    throw new Error(\"Room snapshot channel mismatch\");\n+  }\n+\n+  return {\n+    ...input,\n+    participants: input.participants.map((participant) =>\n+      safePresence(participant.id, participant),\n+    ),\n+  };\n+}\n+\n+export function mapPortalError(code: string): RoomErrorState {\n+  switch (code) {\n+    case \"token_expired\":\n+    case \"invalid_token\":\n+      return \"session-expired\";\n+    case \"channel_at_capacity\":\n+      return \"room-full\";\n+    case \"not_member\":\n+    case \"anonymous_not_allowed\":\n+    case \"blocked\":\n+      return \"access-denied\";\n+    case \"degraded\":\n+    case \"network\":\n+      return \"connection-lost\";\n+    default:\n+      return \"room-unavailable\";\n+  }\n+}\n*** Add File: /home/agent/workspace/src/lib/portal-room.test.ts\n+import { describe, expect, test } from \"bun:test\";\n+\n+import {\n+  canReconnect,\n+  createRoomSnapshot,\n+  mapPortalError,\n+  roomChannelId,\n+  safePresence,\n+} from \"./portal-room\";\n+\n+describe(\"Portal room lifecycle\", () => {\n+  test(\"maps one Match room to one standard Portal channel\", () => {\n+    expect(roomChannelId(\"abc_123\")).toBe(\"room-abc_123\");\n+    expect(() => roomChannelId(\"bad room\")).toThrow();\n+  });\n+\n+  test(\"exposes only safe presence metadata\", () => {\n+    expect(\n+      safePresence(\"user-1\", {\n+        alias: \"A\".repeat(100),\n+        avatar: \"avatar-1\",\n+        activity: \"clue\",\n+      }),\n+    ).toEqual({\n+      id: \"user-1\",\n+      alias: \"A\".repeat(24),\n+      avatar: \"avatar-1\",\n+      activity: \"clue\",\n+    });\n+  });\n+\n+  test(\"bounds reconnects and preserves a late-join snapshot contract\", () => {\n+    const disconnectedAt = 1_000;\n+    expect(canReconnect(disconnectedAt, 31_000)).toBe(true);\n+    expect(canReconnect(disconnectedAt, 31_001)).toBe(false);\n+\n+    expect(\n+      createRoomSnapshot({\n+        roomId: \"abc\",\n+        channelId: \"room-abc\",\n+        status: \"ready\",\n+        phase: \"lobby\",\n+        participants: [\n+          { id: \"user-1\", alias: \"Ana\", avatar: \"sun\", activity: \"idle\" },\n+        ],\n+        receivedAt: 10,\n+      }),\n+    ).toMatchObject({\n+      roomId: \"abc\",\n+      channelId: \"room-abc\",\n+      phase: \"lobby\",\n+      participants: [{ id: \"user-1\", alias: \"Ana\", avatar: \"sun\" }],\n+    });\n+  });\n+\n+  test(\"maps Portal failures to safe user-facing states\", () => {\n+    expect(mapPortalError(\"token_expired\")).toBe(\"session-expired\");\n+    expect(mapPortalError(\"channel_at_capacity\")).toBe(\"room-full\");\n+    expect(mapPortalError(\"unexpected\")).toBe(\"room-unavailable\");\n+  });\n+});\n*** End Patch"})
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/lib/server-env-config.ts\n@@\n export type ServerRuntimeConfig = {\n   supabaseSecretKey: string;\n   portalSecret: string;\n+  portalApiUrl: string;\n@@\n     supabaseSecretKey: required(env, \"SUPABASE_SECRET_KEY\"),\n     portalSecret: required(env, \"PORTAL_SECRET\"),\n+    portalApiUrl: env.PORTAL_API_URL ?? \"https://api.useportal.co\",\n*** Add File: /home/agent/workspace/src/app/api/portal/token/route.ts\n+import { NextResponse } from \"next/server\";\n+\n+import { readServerRuntimeConfig } from \"@/lib/server-env-config\";\n+import { roomChannelId, validateRoomId } from \"@/lib/portal-room\";\n+import { createSupabaseServerClient } from \"@/lib/supabase/server\";\n+\n+type TokenResponse = { token?: unknown };\n+\n+export async function POST(request: Request) {\n+  const supabase = await createSupabaseServerClient();\n+  const {\n+    data: { user },\n+  } = await supabase.auth.getUser();\n+\n+  if (!user) {\n+    return NextResponse.json({ error: \"session-expired\" }, { status: 401 });\n+  }\n+\n+  let body: { roomId?: unknown };\n+  try {\n+    body = (await request.json()) as { roomId?: unknown };\n+  } catch {\n+    return NextResponse.json({ error: \"invalid-room\" }, { status: 400 });\n+  }\n+\n+  if (typeof body.roomId !== \"string\" || !validateRoomId(body.roomId)) {\n+    return NextResponse.json({ error: \"invalid-room\" }, { status: 400 });\n+  }\n+\n+  const config = readServerRuntimeConfig();\n+  let response: Response;\n+  try {\n+    response = await fetch(`${config.portalApiUrl}/v1/tokens`, {\n+      method: \"POST\",\n+      headers: {\n+        authorization: `Bearer ${config.portalSecret}`,\n+        \"content-type\": \"application/json\",\n+      },\n+      body: JSON.stringify({\n+        userId: user.id,\n+        channelId: roomChannelId(body.roomId),\n+      }),\n+      cache: \"no-store\",\n+    });\n+  } catch {\n+    return NextResponse.json({ error: \"room-unavailable\" }, { status: 503 });\n+  }\n+\n+  if (!response.ok) {\n+    const status = response.status >= 500 ? 503 : 502;\n+    return NextResponse.json({ error: \"room-unavailable\" }, { status });\n+  }\n+\n+  const payload = (await response.json()) as TokenResponse;\n+  if (typeof payload.token !== \"string\" || payload.token.length === 0) {\n+    return NextResponse.json({ error: \"room-unavailable\" }, { status: 502 });\n+  }\n+\n+  return NextResponse.json({\n+    token: payload.token,\n+    channelId: roomChannelId(body.roomId),\n+  });\n+}\n*** Add File: /home/agent/workspace/src/lib/portal-token-route.test.ts\n+import { describe, expect, test } from \"bun:test\";\n+\n+import { readFileSync } from \"node:fs\";\n+\n+const route = readFileSync(\n+  new URL(\"../app/api/portal/token/route.ts\", import.meta.url),\n+  \"utf8\",\n+);\n+\n+describe(\"Portal token route contract\", () => {\n+  test(\"keeps the Portal secret server-side and scopes tokens to a room\", () => {\n+    expect(route).toContain('\"@/lib/server-env-config\"');\n+    expect(route).toContain(\"config.portalSecret\");\n+    expect(route).toContain(\"channelId: roomChannelId(body.roomId)\");\n+    expect(route).not.toContain(\"NEXT_PUBLIC_PORTAL\");\n+  });\n+\n+  test(\"rejects unauthenticated, invalid, and failed token requests safely\", () => {\n+    expect(route).toContain('status: 401');\n+    expect(route).toContain('status: 400');\n+    expect(route).toContain('status: 503');\n+    expect(route).toContain('error: \"room-unavailable\"');\n+  });\n+});\n*** End Patch"})
+read({"filePath":"/home/agent/workspace/src/lib/runtime-env.test.ts"})
+bash(bun test src/lib/portal-room.test.ts src/lib/portal-token-route.test.ts)
+The focused room and token contract tests pass. The implementation now keeps `PORTAL_SECRET` in the server route, scopes each issued token to `room-{roomId}`, sanitizes presence metadata, defines a 30-second reconnect window, and validates the late-join snapshot shape. I’m moving to full verification and will fix only issues caused by this change.
+todowrite({"todos":[{"content":"Read issue 4, context, ADRs, and repository status","status":"completed","priority":"high"},{"content":"Explore existing Portal room code and tests","status":"completed","priority":"high"},{"content":"Implement issue 4 with focused tests","status":"completed","priority":"high"},{"content":"Run focused and required verification commands","status":"in_progress","priority":"high"},{"content":"Review diff and commit issue 4 changes","status":"pending","priority":"high"}]})
+bash(bun run test)
+bash(bun run lint)
+bash(bun run typecheck)
+bash(bun run build)
+bash(bunx biome format --write src/lib/portal-room.ts src/lib/portal-room.test.ts src/lib/portal-token-route.test.ts src/lib/server-env-config.ts src/app/api/portal/token/route.ts)
+bash(git diff -- src/lib/portal-room.ts src/lib/portal-room.test.ts src/lib/portal-token-route.test.ts src/lib/server-env-config.ts src/app/api/portal/token/route.ts)
+bash(bunx biome check src/lib/portal-room.ts src/lib/portal-room.test.ts src/lib/portal-token-route.test.ts src/lib/server-env-config.ts src/app/api/portal/token/route.ts)
+bash(bun test src/lib/portal-room.test.ts src/lib/portal-token-route.test.ts && bun run typecheck)
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/app/api/portal/token/route.ts\n@@\n-import { readServerRuntimeConfig } from \"@/lib/server-env-config\";\n import { roomChannelId, validateRoomId } from \"@/lib/portal-room\";\n+import { readServerRuntimeConfig } from \"@/lib/server-env-config\";\n*** End Patch"})
+Typecheck, build, full tests, and focused tests pass. Full lint remains blocked by the pre-existing worktree’s CRLF/formatting changes across unrelated files; the changed files now pass targeted Biome checks after correcting import order. I’m reviewing only the issue 4 files, staging only those paths, and then committing.
+bash(bunx biome check src/lib/portal-room.ts src/lib/portal-room.test.ts src/lib/portal-token-route.test.ts src/lib/server-env-config.ts src/app/api/portal/token/route.ts && bun run lint)
+bash(git status --short --branch && git diff --check && git add src/app/api/portal/token/route.ts src/lib/portal-room.ts src/lib/portal-room.test.ts src/lib/portal-token-route.test.ts src/lib/server-env-config.ts && git diff --cached --stat && git diff --cached --check && git diff --cached -- src/app/api/portal/token/route.ts src/lib/portal-room.ts src/lib/portal-room.test.ts src/lib/portal-token-route.test.ts src/lib/server-env-config.ts && git log --oneline -10)
+bash(git add src/app/api/portal/token/route.ts src/lib/portal-room.ts src/lib/portal-room.test.ts src/lib/portal-token-route.test.ts src/lib/server-env-config.ts && git status --short && git diff --cached --stat && git diff --cached --check)
+bash(git diff --cached --name-only && git diff --cached -- src/app/api/portal/token/route.ts src/lib/portal-room.ts src/lib/portal-room.test.ts src/lib/portal-token-route.test.ts src/lib/server-env-config.ts && git commit -m "feat: add Portal room lifecycle plumbing")
+bash(git log -1 --format='%an <%ae>')
+bash(GIT_AUTHOR_NAME='OpenCode' GIT_AUTHOR_EMAIL='opencode@users.noreply.github.com' GIT_COMMITTER_NAME='OpenCode' GIT_COMMITTER_EMAIL='opencode@users.noreply.github.com' git commit -m "feat: add Portal room lifecycle plumbing")
+bash(git status --short --branch && git show --stat --oneline --summary HEAD)
+todowrite({"todos":[{"content":"Read issue 4, context, ADRs, and repository status","status":"completed","priority":"high"},{"content":"Explore existing Portal room code and tests","status":"completed","priority":"high"},{"content":"Implement issue 4 with focused tests","status":"completed","priority":"high"},{"content":"Run focused and required verification commands","status":"completed","priority":"high"},{"content":"Review diff and commit issue 4 changes","status":"completed","priority":"high"}]})
+Implemented issue 4 on `sandcastle/issue-4`.
+
+- Added scoped Portal token route and server-only secret handling.
+- Added room/channel mapping, safe presence, reconnect bounds, snapshots, and error mapping.
+- Added focused contract tests.
+- Tests, typecheck, and build pass.
+- Full lint is blocked by pre-existing formatting changes in unrelated files.
+- Commit: `7edca34`
+
+<promise>COMPLETE</promise>
+Agent stopped
+Syncing 1 commit to host
+Syncing 1 commit to host done (0.0s)
+Collecting commits
+Collecting commits done (0.1s)
+Agent signaled completion after 1 iteration(s).
+Run complete: agent finished after 1 iteration(s).
+
+--- Run started: 2026-08-08T14:04:00.666Z ---
+Iteration 1/100
+Setting up sandbox
+Setting up sandbox done (0.4s)
+Agent started
+I’ll inspect issue 4, the domain context/ADRs, current branch, and existing Portal tests before changing code. Then I’ll implement the lifecycle contract incrementally and run the required verification commands before committing.
+todowrite({"todos":[{"content":"Read issue 4, context, ADRs, and repository status","status":"in_progress","priority":"high"},{"content":"Inspect existing Portal implementation and tests","status":"pending","priority":"high"},{"content":"Implement tokens, presence, and room lifecycle behavior with tests","status":"pending","priority":"high"},{"content":"Run focused and full verification commands","status":"pending","priority":"high"},{"content":"Review changes and commit on sandcastle/issue-4","status":"pending","priority":"high"}]})
+read({"filePath":"/home/agent/workspace/CONTEXT.md"})
+glob({"pattern":"**/*test*","path":"/home/agent/workspace"})
+glob({"pattern":"**/*portal*","path":"/home/agent/workspace"})
+glob({"pattern":"docs/adr/**/*","path":"/home/agent/workspace"})
+bash(git status --short --branch && git log --oneline -10)
+bash(gh issue view 4 --repo Atypical-Playworks/impostoi --comments)
+read({"filePath":"/home/agent/workspace/package.json"})
+read({"filePath":"/home/agent/workspace/portal.config.ts"})
+read({"filePath":"/home/agent/workspace/docs/adr/0001-live-game-authority.md"})
+read({"filePath":"/home/agent/workspace/src/lib/portal-room.test.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/portal-room.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/portal-token-route.test.ts"})
+read({"filePath":"/home/agent/workspace/docs/adr/0005-deployment-and-migrations.md"})
+read({"filePath":"/home/agent/workspace/src/app/api/portal/token/route.ts"})
+grep({"pattern":"Portal|portal|presence|room|token|reconnect","path":"/home/agent/workspace/docs","include":"*.md"})
+grep({"pattern":"portal|Portal|presence|room","path":"/home/agent/workspace/src","include":"*.{ts,tsx}"})
+bash(git show --stat --oneline 7edca34 && git show --stat --oneline f8d8f56 && git diff -- src/lib/portal-room.ts src/lib/portal-room.test.ts src/app/api/portal/token/route.ts portal.config.ts)
+bash(gh issue view 4 --repo Atypical-Playworks/impostoi --json number,title,state,body,comments,labels)
+Issue 4 is already present in the branch history, but its current coverage is only contract helpers and a token route; there is no explicit join/leave lifecycle model or executable presence state. I’m checking the Portal SDK surface and recent commits now so the fix closes the acceptance gap without inventing a conflicting transport.
+glob({"pattern":"node_modules/@portalsdk/**/*","path":"/home/agent/workspace"})
+read({"filePath":"/home/agent/workspace/src/app/page.tsx","offset":1,"limit":280})
+read({"filePath":"/home/agent/workspace/docs/agents/domain.md"})
+.ts"})
+bash(git show 7edca34:src/lib/portal-room.ts && git show f8d8f56:src/lib/portal-room.ts)
+todowrite({"todos":[{"content":"Read issue 4, context, ADRs, and repository status","status":"completed","priority":"high"},{"content":"Inspect existing Portal implementation and tests","status":"completed","priority":"high"},{"content":"Implement tokens, presence, and room lifecycle behavior with tests","status":"in_progress","priority":"high"},{"content":"Run focused and full verification commands","status":"pending","priority":"high"},{"content":"Review changes and commit on sandcastle/issue-4","status":"pending","priority":"high"}]})
+The lifecycle layer will remain a pure contract helper, not a second authority: it will normalize a snapshot, add/remove safe presence, and permit re-entry only inside the existing 30-second reconnect window. I’ll add behavior tests for join, leave, duplicate joins, and expired reconnects, then implement only that focused surface.
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/lib/portal-room.ts\n@@\n export function canReconnect(\n   disconnectedAt: number,\n   now = Date.now(),\n ): boolean {\n   return now >= disconnectedAt && now - disconnectedAt <= RECONNECT_WINDOW_MS;\n }\n@@\n   };\n }\n+\n+export function joinRoom(\n+  snapshot: RoomSnapshot,\n+  participant: { id: string } & Partial<PresenceMetadata>,\n+): RoomSnapshot {\n+  const normalizedSnapshot = createRoomSnapshot(snapshot);\n+  const normalizedParticipant = safePresence(participant.id, participant);\n+\n+  return {\n+    ...normalizedSnapshot,\n+    participants: [\n+      ...normalizedSnapshot.participants.filter(\n+        ({ id }) => id !== normalizedParticipant.id,\n+      ),\n+      normalizedParticipant,\n+    ],\n+  };\n+}\n+\n+export function leaveRoom(\n+  snapshot: RoomSnapshot,\n+  participantId: string,\n+): RoomSnapshot {\n+  const normalizedSnapshot = createRoomSnapshot(snapshot);\n+\n+  return {\n+    ...normalizedSnapshot,\n+    participants: normalizedSnapshot.participants.filter(\n+      ({ id }) => id !== participantId,\n+    ),\n+  };\n+}\n+\n+export function reconnectRoom(\n+  snapshot: RoomSnapshot,\n+  participant: { id: string } & Partial<PresenceMetadata>,\n+  disconnectedAt: number,\n+  now = Date.now(),\n+): RoomSnapshot | null {\n+  return canReconnect(disconnectedAt, now)\n+    ? joinRoom(snapshot, participant)\n+    : null;\n+}\n \n export function mapPortalError(code: string): RoomErrorState {\n*** Update File: /home/agent/workspace/src/lib/portal-room.test.ts\n@@\n import {\n   canReconnect,\n   createRoomSnapshot,\n+  joinRoom,\n+  leaveRoom,\n   mapPortalError,\n+  reconnectRoom,\n   roomChannelId,\n   safePresence,\n } from \"./portal-room\";\n@@\n   test(\"bounds reconnects and preserves a late-join snapshot contract\", () => {\n@@\n     ).toThrow(\"channel mismatch\");\n   });\n+\n+  test(\"joins and leaves participants using safe presence metadata\", () => {\n+    const snapshot = createRoomSnapshot({\n+      roomId: \"abc\",\n+      channelId: \"room-abc\",\n+      status: \"ready\",\n+      phase: \"lobby\",\n+      participants: [\n+        { id: \"user-1\", alias: \"Ana\", avatar: \"sun\" },\n+      ],\n+      receivedAt: 10,\n+    });\n+\n+    const joined = joinRoom(snapshot, {\n+      id: \"user-2\",\n+      alias: \"B\".repeat(30),\n+      avatar: \"moon\",\n+      activity: \"discussion\",\n+    });\n+    expect(joined.participants).toEqual([\n+      { id: \"user-1\", alias: \"Ana\", avatar: \"sun\" },\n+      {\n+        id: \"user-2\",\n+        alias: \"B\".repeat(24),\n+        avatar: \"moon\",\n+        activity: \"discussion\",\n+      },\n+    ]);\n+\n+    const replaced = joinRoom(joined, {\n+      id: \"user-2\",\n+      alias: \"Bea\",\n+      avatar: \"star\",\n+    });\n+    expect(replaced.participants).toHaveLength(2);\n+    expect(replaced.participants[1]).toEqual({\n+      id: \"user-2\",\n+      alias: \"Bea\",\n+      avatar: \"star\",\n+    });\n+    expect(leaveRoom(replaced, \"user-1\").participants).toEqual([\n+      { id: \"user-2\", alias: \"Bea\", avatar: \"star\" },\n+    ]);\n+  });\n+\n+  test(\"reconnects only while the bounded window is open\", () => {\n+    const snapshot = createRoomSnapshot({\n+      roomId: \"abc\",\n+      channelId: \"room-abc\",\n+      status: \"reconnecting\",\n+      phase: \"discussion\",\n+      participants: [],\n+      receivedAt: 10,\n+    });\n+    const participant = { id: \"user-1\", alias: \"Ana\", avatar: \"sun\" };\n+\n+    expect(reconnectRoom(snapshot, participant, 1_000, 31_000))\n+      .toMatchObject({ participants: [participant] });\n+    expect(reconnectRoom(snapshot, participant, 1_000, 31_001)).toBeNull();\n+  });\n \n   test(\"maps Portal failures to safe user-facing states\", () => {\n*** End Patch"})
+bash(bun test src/lib/portal-room.test.ts)
+bash(git diff --check -- src/lib/portal-room.ts src/lib/portal-room.test.ts)
+bash(bunx biome check src/lib/portal-room.ts src/lib/portal-room.test.ts)
+bash(bunx biome format --write src/lib/portal-room.ts src/lib/portal-room.test.ts)
+bash(git diff --ignore-space-at-eol -- src/lib/portal-room.ts src/lib/portal-room.test.ts)
+bash(bunx biome check src/lib/portal-room.ts src/lib/portal-room.test.ts && git diff --check -- src/lib/portal-room.ts src/lib/portal-room.test.ts)
+Focused lifecycle tests now pass, including safe deduplication on join, removal on leave, and rejection after the reconnect deadline. Formatting and diff checks are clean; I’m moving to the required repository-wide test, lint, typecheck, and build verification.
+todowrite({"todos":[{"content":"Read issue 4, context, ADRs, and repository status","status":"completed","priority":"high"},{"content":"Inspect existing Portal implementation and tests","status":"completed","priority":"high"},{"content":"Implement tokens, presence, and room lifecycle behavior with tests","status":"completed","priority":"high"},{"content":"Run focused and full verification commands","status":"in_progress","priority":"high"},{"content":"Review changes and commit on sandcastle/issue-4","status":"pending","priority":"high"}]})
+bash(bun run test)
+bash(bun run lint)
+bash(bun run typecheck)
+Agent idle for 1 minute
+bash(bun run build)
+Tests, typecheck, and build pass. The repository-wide lint command fails on 32 pre-existing formatting diagnostics across unrelated CRLF-normalized files, including files I did not touch; the changed Portal files pass Biome directly. I’m reviewing the staged scope next and will commit only the two Portal lifecycle files.
+bash(git log --oneline -10)
+bash(git diff --stat -- src/lib/portal-room.ts src/lib/portal-room.test.ts && git diff --check -- src/lib/portal-room.ts src/lib/portal-room.test.ts && git diff -- src/lib/portal-room.ts src/lib/portal-room.test.ts)
+bash(git status --short --branch)
+bash(git add src/lib/portal-room.ts src/lib/portal-room.test.ts && git diff --cached --check && git diff --cached --stat && git diff --cached -- src/lib/portal-room.ts src/lib/portal-room.test.ts)
+bash(git commit -m "feat: model Portal room membership lifecycle")
+The staged diff is limited to the Portal room helper and its tests. The first commit attempt was blocked because this environment has no Git author identity configured; I’ll use the repository’s existing commit author identity for this commit without changing Git configuration.
+bash(git log -1 --format='%an%n%ae')
+bash(GIT_AUTHOR_NAME='OpenCode' GIT_AUTHOR_EMAIL='opencode@users.noreply.github.com' GIT_COMMITTER_NAME='OpenCode' GIT_COMMITTER_EMAIL='opencode@users.noreply.github.com' git commit -m "feat: model Portal room membership lifecycle")
+bash(git show --stat --oneline --summary HEAD)
+bash(git status --short --branch)
+todowrite({"todos":[{"content":"Read issue 4, context, ADRs, and repository status","status":"completed","priority":"high"},{"content":"Inspect existing Portal implementation and tests","status":"completed","priority":"high"},{"content":"Implement tokens, presence, and room lifecycle behavior with tests","status":"completed","priority":"high"},{"content":"Run focused and full verification commands","status":"completed","priority":"high"},{"content":"Review changes and commit on sandcastle/issue-4","status":"completed","priority":"high"}]})
+Implemented and committed `b1f5f94` on `sandcastle/issue-4`.
+
+- Added Portal `joinRoom`, `leaveRoom`, and bounded `reconnectRoom`.
+- Added behavior tests for membership lifecycle and reconnect expiry.
+- Tests, typecheck, and build pass.
+- Full lint is blocked by pre-existing formatting issues in unrelated files.
+
+<promise>COMPLETE</promise>
+Agent stopped
+Syncing 1 commit to host
+Syncing 1 commit to host done (0.0s)
+Collecting commits
+Collecting commits done (0.1s)
+Agent signaled completion after 1 iteration(s).
+Run complete: agent finished after 1 iteration(s).

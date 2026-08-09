@@ -7,7 +7,6 @@ import {
   ChevronLeft,
   Clock3,
   MessageCircle,
-  MessagesSquare,
   Send,
   Shield,
   Sparkles,
@@ -32,7 +31,7 @@ type RoundParticipant = {
   id: string;
   alias: string;
   avatar: string;
-  activity: "idle" | "clue" | "discussion" | "voting";
+  activity: "idle" | "clue" | "voting";
   isYou?: boolean;
   isHost?: boolean;
   isPending?: boolean;
@@ -451,7 +450,6 @@ function LiveRoundRoom({
   onRetry: () => void;
 }) {
   const [draftClue, setDraftClue] = useState("");
-  const [draftDiscussion, setDraftDiscussion] = useState("");
   const [selectedVote, setSelectedVote] = useState<string | null>(null);
   const [sentClue, setSentClue] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -561,14 +559,22 @@ function LiveRoundRoom({
         admissionStatus: admissionConfirmed ? "confirmed" : "pending",
         activity:
           view?.phase === "clue_phase"
-            ? "clue"
-            : view?.phase === "discussion"
-              ? "discussion"
-              : view?.phase === "voting"
-                ? "voting"
-                : "idle",
+            ? view.activeTurnId === me.id
+              ? "clue"
+              : "idle"
+            : view?.phase === "voting"
+              ? "voting"
+              : "idle",
       });
-  }, [admissionConfirmed, isHost, me, profile, setMetadata, view?.phase]);
+  }, [
+    admissionConfirmed,
+    isHost,
+    me,
+    profile,
+    setMetadata,
+    view?.phase,
+    view.activeTurnId,
+  ]);
 
   const submitAction = async (
     action: string,
@@ -604,9 +610,7 @@ function LiveRoundRoom({
             const portalParticipant = portalById.get(participant.id);
             const metadata = portalParticipant?.metadata ?? {};
             const activity =
-              metadata.activity === "clue" ||
-              metadata.activity === "discussion" ||
-              metadata.activity === "voting"
+              metadata.activity === "clue" || metadata.activity === "voting"
                 ? metadata.activity
                 : "idle";
             return {
@@ -628,9 +632,7 @@ function LiveRoundRoom({
             const avatar =
               typeof metadata.avatar === "string" ? metadata.avatar : "#888888";
             const activity =
-              metadata.activity === "clue" ||
-              metadata.activity === "discussion" ||
-              metadata.activity === "voting"
+              metadata.activity === "clue" || metadata.activity === "voting"
                 ? metadata.activity
                 : "idle";
             const isHost = metadata.isHost === true;
@@ -708,12 +710,13 @@ function LiveRoundRoom({
     );
   }
 
-  const participants = view.participants.map((participant) => ({
+  const viewState = view; // We know it's not null here
+  const participants = viewState.participants.map((participant) => ({
     ...participant,
     activity: "idle" as const,
     isYou: participant.id === me?.id,
   }));
-  const stage = view.votingStage ?? "ai_detection";
+  const stage = viewState.votingStage ?? "ai_detection";
   const submit = async (content: Record<string, unknown>) => {
     const action = typeof content.action === "string" ? content.action : "";
     await submitAction(
@@ -792,23 +795,14 @@ function LiveRoundRoom({
             <CluePhase
               clue={draftClue}
               clues={view.clues}
+              activeTurnId={view.activeTurnId}
+              participants={participants}
+              myId={me?.id ?? ""}
               submittedClue={sentClue}
               category={view.category}
               secretWord={view.secretWord}
-              onChange={setDraftClue}
+              onChange={(v) => setDraftClue(v.trim().replace(/\s/g, ""))}
               onSubmit={() => void submitClue()}
-              onContinue={() => void submit(liveAction("start_discussion"))}
-            />
-          ) : null}
-          {view.phase === "discussion" ? (
-            <Discussion
-              value={draftDiscussion}
-              onChange={setDraftDiscussion}
-              onContinue={() =>
-                void submit(
-                  liveAction("start_voting", { discussion: draftDiscussion }),
-                )
-              }
             />
           ) : null}
           {view.phase === "voting" ? (
@@ -918,7 +912,7 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
             </div>
             <div className="round-timer">
               <Clock3 size={19} />{" "}
-              {formatTimer(phase === "discussion" ? 60 : 20)}
+              {formatTimer(20)}
             </div>
           </div>
 
@@ -929,18 +923,14 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
             <CluePhase
               clue={clue}
               clues={clues}
+              activeTurnId={"demo-1"}
+              participants={[{ id: "demo-1", alias: "Participante", avatar: "#21D4D4", isYou: true }]}
+              myId={"demo-1"}
               submittedClue={submittedClue}
-              category=""
+              category="Animales"
+              secretWord="zorro"
               onChange={setClue}
               onSubmit={submitClue}
-              onContinue={() => setPhase("discussion")}
-            />
-          ) : null}
-          {phase === "discussion" ? (
-            <Discussion
-              value={discussion}
-              onChange={setDiscussion}
-              onContinue={() => setPhase("voting")}
             />
           ) : null}
           {phase === "voting" ? (
@@ -1002,22 +992,29 @@ function Lobby({ onStart }: { onStart: () => void }) {
 function CluePhase({
   clue,
   clues,
+  activeTurnId,
+  participants,
+  myId,
   submittedClue,
   category,
   secretWord,
   onChange,
   onSubmit,
-  onContinue,
 }: {
   clue: string;
   clues: readonly { alias: string; text: string }[];
+  activeTurnId?: string;
+  participants: readonly RoundParticipant[];
+  myId: string;
   submittedClue: string | null;
   category?: string;
   secretWord?: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
-  onContinue: () => void;
 }) {
+  const isMyTurn = activeTurnId === myId;
+  const activeParticipant = participants.find((p) => p.id === activeTurnId);
+
   return (
     <div className="phase-stack">
       <div className="word-card">
@@ -1031,101 +1028,59 @@ function CluePhase({
       <div className="round-card clue-card">
         <div className="card-title">
           <MessageCircle size={21} />
-          <h2>Da una pista sin regalarla</h2>
+          <h2>
+            {isMyTurn
+              ? "Es tu turno de dar pista"
+              : `Turno de ${activeParticipant?.alias ?? "alguien"}`}
+          </h2>
         </div>
-        <p>Tu pista queda fijada para siempre. Se breve, se astuto.</p>
-        <textarea
-          value={clue}
-          disabled={submittedClue !== null}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="Escribe una palabra o frase corta..."
-          maxLength={100}
-        />
+        <p>
+          {isMyTurn
+            ? "Tu pista debe ser de UNA sola palabra. Se breve y astuto."
+            : "Espera a que termine su turno."}
+        </p>
+        <div className="clue-input-wrapper">
+          <input
+            type="text"
+            value={clue}
+            disabled={!isMyTurn || submittedClue !== null}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder={
+              isMyTurn ? "Escribe SOLO UNA palabra..." : "Esperando..."
+            }
+            maxLength={20}
+            pattern="^\S+$"
+          />
+        </div>
         <div className="card-actions">
-          {submittedClue ? (
-            <span className="submitted-label">
-              <Check size={17} /> Pista enviada
-            </span>
-          ) : (
+          {isMyTurn && (
             <button
               type="button"
               className="round-primary"
-              disabled={!canSubmitClue(clue, false)}
+              disabled={!canSubmitClue(clue, submittedClue !== null)}
               onClick={onSubmit}
             >
               <Send size={17} /> Enviar pista
             </button>
           )}
-          {clues.length >= 5 || submittedClue ? (
-            <button type="button" className="text-button" onClick={onContinue}>
-              Ir a la discusion <Target size={16} />
-            </button>
-          ) : null}
         </div>
       </div>
       <div className="clue-list">
         <h3>Pistas en la mesa</h3>
-        {clues.map((item) => (
-          <div className="clue-row" key={`${item.alias}-${item.text}`}>
-            <strong>{item.alias}</strong>
-            <span>{item.text}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Discussion({
-  value,
-  onChange,
-  onContinue,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  onContinue: () => void;
-}) {
-  const [secondsLeft, setSecondsLeft] = useState(60);
-
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      setSecondsLeft((current) => Math.max(0, current - 1));
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, []);
-
-  return (
-    <div className="phase-stack">
-      <div className="discussion-banner">
-        <MessagesSquare size={31} />
-        <div>
-          <strong>{formatTimer(secondsLeft)} para discutir</strong>
-          <span>
-            {secondsLeft > 0
-              ? "Comparad las pistas. La charla se cerrara al votar."
-              : "La charla esta cerrada. Ya podeis votar."}
-          </span>
-        </div>
-      </div>
-      <div className="round-card discussion-card">
-        <h2>Que te llama la atencion?</h2>
-        <p>
-          Este mensaje es una demostracion de la conversacion publica de la
-          sala.
-        </p>
-        <textarea
-          value={value}
-          disabled={secondsLeft === 0}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="Escribe al grupo..."
-          maxLength={280}
-        />
-        <button type="button" className="round-primary" onClick={onContinue}>
-          {secondsLeft > 0
-            ? "Avanzar en la demo y votar"
-            : "Cerrar discusion y votar"}{" "}
-          <Target size={18} />
-        </button>
+        {participants.map((participant) => {
+          const theirClue = clues.find((c) => c.alias === participant.alias);
+          if (!theirClue && participant.id !== activeTurnId) return null;
+          return (
+            <div className="clue-row" key={participant.alias}>
+              <strong>{participant.alias}</strong>
+              {theirClue ? (
+                <span>{theirClue.text}</span>
+              ) : (
+                <span className="thinking-dots">Escribiendo...</span>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

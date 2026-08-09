@@ -1,0 +1,271 @@
+
+--- Run started: 2026-08-09T00:21:01.564Z ---
+Iteration 1/1
+Setting up sandbox
+Setting up sandbox done (0.4s)
+Agent started
+I’ll inspect the branch history and working tree first, then compare the issue scope against `CONTEXT.md`, ADRs, and coding standards before reviewing implementation and tests. I’ll only edit if the review finds a concrete defect.
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and assigned issue scope","status":"in_progress","priority":"high"},{"content":"Read domain context, ADRs, and coding standards","status":"pending","priority":"high"},{"content":"Review changed code for correctness, security, and tests","status":"pending","priority":"high"},{"content":"Apply focused fixes and run verification if needed","status":"pending","priority":"high"},{"content":"Report review outcome and completion marker","status":"pending","priority":"medium"}]})
+glob({"pattern":"**/*issue*14*","path":"/home/agent/workspace"})
+glob({"pattern":".sandcastle/CODING_STANDARDS.md","path":"/home/agent/workspace"})
+glob({"pattern":"docs/adr/*","path":"/home/agent/workspace"})
+glob({"pattern":"CONTEXT.md","path":"/home/agent/workspace"})
+bash(git status --short --branch && git log --oneline --decorate -10 && git branch --show-current)
+read({"filePath":"/home/agent/workspace/CONTEXT.md"})
+read({"filePath":"/home/agent/workspace/.sandcastle/CODING_STANDARDS.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0002-independent-hidden-roles.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0005-deployment-and-migrations.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0001-live-game-authority.md"})
+bash(git show --stat --oneline HEAD && git diff --stat HEAD^ HEAD && git diff --name-status HEAD^ HEAD)
+read({"filePath":"/home/agent/workspace/docs/adr/0004-agent-runtime-and-benchmarking.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0003-pseudonymous-progress.md"})
+read({"filePath":"/home/agent/workspace/src/lib/room-lifecycle.test.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/room-lifecycle.ts"})
+bash(git diff HEAD^ HEAD -- 'src/app/api/rooms/**' 'src/lib/room-lifecycle.ts' 'src/app/page.tsx' 'src/app/room/[roomId]/page.tsx' 'supabase/migrations/20260809000000_rooms.sql' 'src/app/api/portal/token/route.ts')
+read({"filePath":"/home/agent/workspace/src/app/api/rooms/route.ts"})
+read({"filePath":"/home/agent/workspace/src/app/page.tsx","offset":1,"limit":340})
+read({"filePath":"/home/agent/workspace/src/lib/portal-room.ts"})
+read({"filePath":"/home/agent/workspace/supabase/migrations/20260808000000_guest_progress.sql"})
+grep({"pattern":"create_room|join_room|get_public_room|room_participants|rooms","path":"/home/agent/workspace","include":"*.{ts,sql,md}"})
+read({"filePath":"/home/agent/workspace/src/app/room/[roomId]/page.tsx"})
+read({"filePath":"/home/agent/workspace/src/app/api/portal/token/route.ts"})
+read({"filePath":"/home/agent/workspace/src/app/api/auth/guest/route.ts"})
+grep({"pattern":"rate|RateLimit|x-forwarded-for|retry","path":"/home/agent/workspace/src","include":"*.ts"})
+bash(git show HEAD^:src/app/room/'[roomId]'/page.tsx && git show HEAD^:src/app/page.tsx | diff -u - src/app/page.tsx)
+bash(git diff --check HEAD^ HEAD && git status --short)
+bash(git show --format=fuller --no-patch HEAD && git log --oneline --all --decorate -- src/app/api/rooms)
+grep({"pattern":"/api/portal/token|portal/token","path":"/home/agent/workspace/src","include":"*.{ts,tsx}"})
+read({"filePath":"/home/agent/workspace/src/app/round-room.tsx","offset":1,"limit":240})
+read({"filePath":"/home/agent/workspace/src/lib/deployment-contract.test.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/portal-token-route.test.ts"})
+bash(git diff HEAD^ HEAD -- src/app/page.tsx | git diff --numstat --no-index /dev/null -)
+bash(git show b696ff5 --stat && git show b696ff5 -- docs/adr/0001-live-game-authority.md CONTEXT.md)
+bash(bun run test)
+bash(bun run typecheck)
+The branch passes existing typecheck and tests, but the review found two concrete contract violations: reconnecting participants can change their fixed alias/avatar, and any authenticated user can mint a Portal token for any valid room code without being a room participant. The room-code validator also accepts `L`, despite the generator excluding it as ambiguous. I’m applying focused fixes and adding boundary coverage.
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and assigned issue scope","status":"completed","priority":"high"},{"content":"Read domain context, ADRs, and coding standards","status":"completed","priority":"high"},{"content":"Review changed code for correctness, security, and tests","status":"in_progress","priority":"high"},{"content":"Apply focused fixes and run verification if needed","status":"pending","priority":"high"},{"content":"Report review outcome and completion marker","status":"pending","priority":"medium"}]})
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/lib/room-lifecycle.ts\n@@\n-const roomCodePattern = /^[A-HJ-NP-Z2-9]{6}$/;\n+const roomCodePattern = /^[A-HJKMNPQRSTUVWXYZ23456789]{6}$/;\n*** Update File: /home/agent/workspace/src/lib/room-lifecycle.test.ts\n@@\n     expect(validateRoomCode(\"ahjkmnp234\".slice(0, 6))).toBe(true);\n-    expect(validateRoomCode(\"A0O1IL\")).toBe(false);\n+    expect(validateRoomCode(\"A0O1IL\")).toBe(false);\n+    expect(validateRoomCode(\"ABC2L3\")).toBe(false);\n*** Update File: /home/agent/workspace/src/app/api/portal/token/route.ts\n@@\n import { roomChannelId, validateRoomId } from \"@/lib/portal-room\";\n import { validateRoomCode } from \"@/lib/room-lifecycle\";\n import { readServerRuntimeConfig } from \"@/lib/server-env-config\";\n-import { createSupabaseServerClient } from \"@/lib/supabase/server\";\n+import {\n+  createSupabaseAdminClient,\n+  createSupabaseServerClient,\n+} from \"@/lib/supabase/server\";\n@@\n   ) {\n     return NextResponse.json({ error: \"invalid-room\" }, { status: 400 });\n   }\n \n+  const config = readServerRuntimeConfig();\n+  const admin = createSupabaseAdminClient(config.supabaseSecretKey);\n+  const { data: isMember, error: membershipError } = await admin.rpc(\n+    \"is_room_member\",\n+    { requested_code: body.roomId, requested_player_id: user.id },\n+  );\n+  if (membershipError) {\n+    return NextResponse.json({ error: \"room-unavailable\" }, { status: 503 });\n+  }\n+  if (isMember !== true) {\n+    return NextResponse.json({ error: \"access-denied\" }, { status: 403 });\n+  }\n+\n   const channelId = roomChannelId(body.roomId);\n-  const config = readServerRuntimeConfig();\n   let response: Response;\n*** Update File: /home/agent/workspace/supabase/migrations/20260809000000_rooms.sql\n@@\n create or replace function public.join_room(\n@@\n-  values (room_row.code, requested_player_id, requested_alias, requested_avatar)\n-  on conflict (room_code, player_id) do update set alias = excluded.alias, avatar = excluded.avatar;\n+  values (room_row.code, requested_player_id, requested_alias, requested_avatar)\n+  on conflict (room_code, player_id) do nothing;\n@@\n   return result;\n end;\n $$;\n+\n+create or replace function public.is_room_member(\n+  requested_code text,\n+  requested_player_id uuid\n+)\n+returns boolean\n+language sql\n+security definer\n+set search_path = public\n+as $$\n+  select exists (\n+    select 1\n+    from public.room_participants\n+    where room_code = upper(requested_code)\n+      and player_id = requested_player_id\n+  );\n+$$;\n@@\n revoke all on function public.get_public_room from public;\n revoke all on function public.join_room from public;\n+revoke all on function public.is_room_member from public;\n@@\n grant execute on function public.get_public_room to service_role;\n grant execute on function public.join_room to service_role;\n+grant execute on function public.is_room_member to service_role;\n*** Update File: /home/agent/workspace/src/lib/portal-token-route.test.ts\n@@\n     expect(route).toContain(\"config.portalSecret\");\n+    expect(route).toContain('\"is_room_member\"');\n+    expect(route).toContain('error: \"access-denied\"');\n*** Update File: /home/agent/workspace/src/lib/room-lifecycle.test.ts\n@@\n     expect(validateRoomCode(\"ABC12\")).toBe(false);\n*** End Patch"})
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/supabase/migrations/20260809000000_rooms.sql\n@@\n-  on conflict (room_code, player_id) do nothing;\n+  on conflict (room_code, player_id) do nothing;\n*** End Patch"})
+read({"filePath":"/home/agent/workspace/supabase/migrations/20260809000000_rooms.sql","offset":76,"limit":25})
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and assigned issue scope","status":"completed","priority":"high"},{"content":"Read domain context, ADRs, and coding standards","status":"completed","priority":"high"},{"content":"Review changed code for correctness, security, and tests","status":"completed","priority":"high"},{"content":"Apply focused fixes and run verification if needed","status":"in_progress","priority":"high"},{"content":"Report review outcome and completion marker","status":"pending","priority":"medium"}]})
+The fixes now preserve the original participant profile on retries, reject non-members before token issuance, and align validation with the generated alphabet. I’m running the full repository verification next, then I’ll commit only the review fixes without touching the pre-existing worktree changes.
+bash(bun run test)
+bash(bun run lint)
+bash(bun run typecheck)
+Agent idle for 1 minute
+bash(bun run build)
+bash(git diff HEAD -- src/lib/room-lifecycle.ts src/lib/room-lifecycle.test.ts src/app/api/portal/token/route.ts src/lib/portal-token-route.test.ts supabase/migrations/20260809000000_rooms.sql)
+bash(git diff --check HEAD -- src/lib/room-lifecycle.ts src/lib/room-lifecycle.test.ts src/app/api/portal/token/route.ts src/lib/portal-token-route.test.ts supabase/migrations/20260809000000_rooms.sql && git diff --stat HEAD -- src/lib/room-lifecycle.ts src/lib/room-lifecycle.test.ts src/app/api/portal/token/route.ts src/lib/portal-token-route.test.ts supabase/migrations/20260809000000_rooms.sql)
+bash(bunx biome check src/lib/room-lifecycle.ts src/lib/room-lifecycle.test.ts src/app/api/portal/token/route.ts src/lib/portal-token-route.test.ts)
+bash(perl -pi -e 's/\r?\n/\r\n/g' 'src/app/api/portal/token/route.ts' 'src/lib/portal-token-route.test.ts')
+bash(bun test src/lib/room-lifecycle.test.ts src/lib/portal-token-route.test.ts)
+bash(git diff --check HEAD -- src/lib/room-lifecycle.ts src/lib/room-lifecycle.test.ts src/app/api/portal/token/route.ts src/lib/portal-token-route.test.ts supabase/migrations/20260809000000_rooms.sql; git diff --stat HEAD -- src/lib/room-lifecycle.ts src/lib/room-lifecycle.test.ts src/app/api/portal/token/route.ts src/lib/portal-token-route.test.ts supabase/migrations/20260809000000_rooms.sql)
+bash(bunx biome check src/lib/room-lifecycle.ts src/lib/room-lifecycle.test.ts)
+bash(git status --short --branch)
+bash(perl -pi -e 's/\r\n/\n/g' 'src/app/api/portal/token/route.ts' 'src/lib/portal-token-route.test.ts')
+bash(git diff HEAD -- src/app/api/portal/token/route.ts src/lib/portal-token-route.test.ts)
+bash(git diff --check HEAD -- src/lib/room-lifecycle.ts src/lib/room-lifecycle.test.ts src/app/api/portal/token/route.ts src/lib/portal-token-route.test.ts supabase/migrations/20260809000000_rooms.sql; git diff --stat HEAD -- src/lib/room-lifecycle.ts src/lib/room-lifecycle.test.ts src/app/api/portal/token/route.ts src/lib/portal-token-route.test.ts supabase/migrations/20260809000000_rooms.sql)
+read({"filePath":"/home/agent/workspace/src/lib/room-lifecycle.test.ts","offset":12,"limit":12})
+bash(git diff HEAD -- src/lib/room-lifecycle.ts src/lib/room-lifecycle.test.ts supabase/migrations/20260809000000_rooms.sql)
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/lib/room-lifecycle.test.ts\n@@\n     expect(validateRoomCode(\"ahjkmnp234\".slice(0, 6))).toBe(true);\n     expect(validateRoomCode(\"A0O1IL\")).toBe(false);\n+    expect(validateRoomCode(\"ABC2L3\")).toBe(false);\n     expect(validateRoomCode(\"ABC12\")).toBe(false);\n*** End Patch"})
+bash(git diff --check HEAD -- src/app/api/portal/token/route.ts src/lib/portal-token-route.test.ts src/lib/room-lifecycle.ts src/lib/room-lifecycle.test.ts supabase/migrations/20260809000000_rooms.sql)
+bash(bunx biome check src/app/api/portal/token/route.ts src/lib/portal-token-route.test.ts src/lib/room-lifecycle.ts src/lib/room-lifecycle.test.ts)
+bash(bun test)
+bash(bun run typecheck)
+Verification of the focused changes is clean: targeted Biome, typecheck, full tests, and build all pass. The repository-wide lint command remains blocked by 52 pre-existing formatting diagnostics caused by unrelated CRLF changes already present in the worktree; I’m leaving those files untouched and will commit only the five review files.
+bash(git add 'src/app/api/portal/token/route.ts' 'src/lib/portal-token-route.test.ts' 'src/lib/room-lifecycle.ts' 'src/lib/room-lifecycle.test.ts' 'supabase/migrations/20260809000000_rooms.sql' && git diff --cached --check && git diff --cached --stat && git diff --cached --name-only && git commit -m "fix: enforce room membership and profile privacy")
+The commit was blocked because this checkout has no Git author identity configured. The changes are staged and verified; I’ll create the requested commit using a one-command temporary identity, without modifying repository or global Git configuration.
+bash(GIT_AUTHOR_NAME='OpenCode' GIT_AUTHOR_EMAIL='opencode@localhost' GIT_COMMITTER_NAME='OpenCode' GIT_COMMITTER_EMAIL='opencode@localhost' git commit -m "fix: enforce room membership and profile privacy")
+bash(git show --stat --oneline HEAD && git show --check --oneline HEAD)
+bash(git status --short --branch && git log --oneline --decorate -3)
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and assigned issue scope","status":"completed","priority":"high"},{"content":"Read domain context, ADRs, and coding standards","status":"completed","priority":"high"},{"content":"Review changed code for correctness, security, and tests","status":"completed","priority":"high"},{"content":"Apply focused fixes and run verification if needed","status":"completed","priority":"high"},{"content":"Report review outcome and completion marker","status":"completed","priority":"medium"}]})
+Reviewed and fixed the branch.
+
+- Enforced fixed aliases/avatars on reconnect.
+- Restricted Portal tokens to room participants.
+- Corrected ambiguous room-code validation.
+- Added regression coverage.
+- Tests, typecheck, build, and targeted lint pass.
+- Repository lint remains blocked by pre-existing unrelated formatting changes.
+- Commit: `4ff16ae`
+
+<promise>COMPLETE</promise>
+Agent stopped
+Syncing 1 commit to host
+Syncing 1 commit to host done (0.0s)
+Collecting commits
+Collecting commits done (0.1s)
+Agent signaled completion after 1 iteration(s).
+Run complete: agent finished after 1 iteration(s).
+
+--- Run started: 2026-08-09T00:36:13.230Z ---
+Iteration 1/1
+Setting up sandbox
+Setting up sandbox done (0.4s)
+Agent started
+I’ll inspect the branch history and diff first, then cross-check the relevant domain guidance and run focused verification before deciding whether any fixes are warranted.
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository guidance","status":"in_progress","priority":"high"},{"content":"Review changed code for correctness, security, and contract compliance","status":"pending","priority":"high"},{"content":"Run relevant tests and apply only necessary fixes","status":"pending","priority":"high"},{"content":"Report findings and completion status","status":"pending","priority":"medium"}]})
+read({"filePath":"/home/agent/workspace/CONTEXT.md"})
+bash(git diff --stat main...sandcastle/issue-14 && git diff --name-status main...sandcastle/issue-14)
+glob({"pattern":"docs/adr/*","path":"/home/agent/workspace"})
+read({"filePath":"/home/agent/workspace/AGENTS.md"})
+read({"filePath":"/home/agent/workspace/.sandcastle/CODING_STANDARDS.md"})
+bash(git status --short --branch && git log --oneline --decorate -12)
+The branch contains three issue-specific commits and only five files differ from `origin/main`; the many modified files in the worktree are pre-existing and unrelated, so I’ll leave them untouched. I’m narrowing the review to the room-token route, room lifecycle contracts, and the room-code migration.
+bash(git diff origin/main...sandcastle/issue-14 -- src/app/api/portal/token/route.ts src/lib/portal-token-route.test.ts src/lib/room-lifecycle.test.ts supabase/migrations/20260809000000_rooms.sql supabase/migrations/20260809010000_fix_room_code_constraint.sql)
+read({"filePath":"/home/agent/workspace/src/lib/portal-token-route.test.ts"})
+read({"filePath":"/home/agent/workspace/src/lib/room-lifecycle.test.ts"})
+read({"filePath":"/home/agent/workspace/docs/adr/0005-deployment-and-migrations.md"})
+read({"filePath":"/home/agent/workspace/docs/adr/0001-live-game-authority.md"})
+read({"filePath":"/home/agent/workspace/supabase/migrations/20260809000000_rooms.sql"})
+read({"filePath":"/home/agent/workspace/supabase/migrations/20260809010000_fix_room_code_constraint.sql"})
+read({"filePath":"/home/agent/workspace/src/app/api/portal/token/route.ts"})
+bash(git log --oneline --stat origin/main..sandcastle/issue-14 && git diff --check origin/main...sandcastle/issue-14)
+glob({"pattern":"src/app/api/rooms/**/*.ts","path":"/home/agent/workspace"})
+read({"filePath":"/home/agent/workspace/src/lib/room-lifecycle.ts"})
+read({"filePath":"/home/agent/workspace/src/app/api/rooms/route.ts"})
+read({"filePath":"/home/agent/workspace/src/app/api/rooms/[roomId]/route.ts"})
+bash(git show --stat --oneline e faa19d 2>/dev/null || true; git show efaa19d:src/lib/room-lifecycle.ts)
+read({"filePath":"/home/agent/workspace/src/app/api/rooms/[roomId]/join/route.ts"})
+bash(git show --stat --oneline 4ff16ae && git show 4ff16ae -- src/app/api/portal/token/route.ts supabase/migrations/20260809000000_rooms.sql src/lib/room-lifecycle.ts)
+bash(git merge-base origin/main sandcastle/issue-14 && git rev-list --left-right --count origin/main...sandcastle/issue-14 && git log --oneline --graph --decorate --all -12)
+bash(bun run test)
+bash(bun run lint)
+bash(bun run typecheck)
+bash(git diff --stat b696ff5..sandcastle/issue-14 && git diff --name-status b696ff5..sandcastle/issue-14)
+bash(git show --format=fuller --no-patch efaa19d && git show --format=fuller --no-patch 4ff16ae && git show --format=fuller --no-patch 5e479d0)
+bash(git branch -avv --no-abbrev)
+read({"filePath":"/home/agent/workspace/src/app/page.tsx"})
+read({"filePath":"/home/agent/workspace/src/app/room/[roomId]/page.tsx"})
+bash(git diff b696ff5..sandcastle/issue-14 -- src/app/page.tsx src/app/room/'[roomId]'/page.tsx)
+grep({"pattern":"api/portal/token|roomId","path":"/home/agent/workspace/src/app/round-room.tsx","include":"round-room.tsx"})
+read({"filePath":"/home/agent/workspace/src/app/round-room.tsx","offset":65,"limit":100})
+The review found one concrete contract violation: the new room page blocks all reconnects once a room is `started`, even though existing participants must be able to reclaim their seat and obtain a Portal token. I also found that the membership RPC grants tokens for cancelled or expired lobby rooms; I’ll tighten both paths without changing late-join behavior, then add focused contract coverage.
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository guidance","status":"completed","priority":"high"},{"content":"Review changed code for correctness, security, and contract compliance","status":"completed","priority":"high"},{"content":"Run relevant tests and apply only necessary fixes","status":"in_progress","priority":"high"},{"content":"Report findings and completion status","status":"pending","priority":"medium"}]})
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/supabase/migrations/20260809000000_rooms.sql\n@@\n   select exists (\n-    select 1\n-    from public.room_participants\n-    where room_code = upper(requested_code)\n-      and player_id = requested_player_id\n+    select 1\n+    from public.room_participants p\n+    join public.rooms r on r.code = p.room_code\n+    where p.room_code = upper(requested_code)\n+      and p.player_id = requested_player_id\n+      and (r.status = 'started' or (r.status = 'lobby' and r.expires_at > now()))\n   );\n $$;\n*** Update File: /home/agent/workspace/supabase/migrations/20260809010000_fix_room_code_constraint.sql\n@@\n alter table public.rooms\n   add constraint rooms_code_check check (code ~ '^[A-HJKMNP-Z2-9]{6}$');\n+\n+create or replace function public.is_room_member(\n+  requested_code text,\n+  requested_player_id uuid\n+)\n+returns boolean\n+language sql\n+security definer\n+set search_path = public\n+as $$\n+  select exists (\n+    select 1\n+    from public.room_participants p\n+    join public.rooms r on r.code = p.room_code\n+    where p.room_code = upper(requested_code)\n+      and p.player_id = requested_player_id\n+      and (r.status = 'started' or (r.status = 'lobby' and r.expires_at > now()))\n+  );\n+$$;\n*** Update File: /home/agent/workspace/src/app/room/[roomId]/page.tsx\n@@\n-      const guest = await fetch(\"/api/auth/guest\", { method: \"POST\" });\n-      const response = guest.ok\n-        ? await fetch(`/api/rooms/${roomId}/join`, {\n-            method: \"POST\",\n-            headers: { \"content-type\": \"application/json\" },\n-            body: JSON.stringify(profile),\n-          })\n-        : null;\n-      if (!response?.ok) {\n-        setJoining(false);\n-        setError(\"No se pudo entrar en la sala.\");\n-        return;\n-      }\n-      setConfirmed(true);\n+      try {\n+        const guest = await fetch(\"/api/auth/guest\", { method: \"POST\" });\n+        const response = guest.ok && room?.status === \"lobby\"\n+          ? await fetch(`/api/rooms/${roomId}/join`, {\n+              method: \"POST\",\n+              headers: { \"content-type\": \"application/json\" },\n+              body: JSON.stringify(profile),\n+            })\n+          : null;\n+        if (!guest.ok || (room?.status === \"lobby\" && !response?.ok)) {\n+          throw new Error(\"join\");\n+        }\n+        setConfirmed(true);\n+      } catch {\n+        setJoining(false);\n+        setError(\"No se pudo entrar en la sala.\");\n+      }\n@@\n-          <button type=\"button\" className=\"round-primary\" disabled={!room || room.status !== \"lobby\" || room.humanCount >= room.capacity || joining} onClick={() => void confirmJoin()}>\n+          <button type=\"button\" className=\"round-primary\" disabled={!room || (room.status !== \"lobby\" && room.status !== \"started\") || (room.status === \"lobby\" && room.humanCount >= room.capacity) || joining} onClick={() => void confirmJoin()}>\n*** Update File: /home/agent/workspace/src/lib/portal-token-route.test.ts\n@@\n import { readFileSync } from \"node:fs\";\n@@\n   test(\"keeps the Portal secret server-side and scopes tokens to a room\", () => {\n@@\n   });\n+\n+  test(\"requires an active room membership before issuing a token\", () => {\n+    const roomsMigration = readFileSync(\n+      new URL(\"../../supabase/migrations/20260809000000_rooms.sql\", import.meta.url),\n+      \"utf8\",\n+    );\n+    expect(roomsMigration).toContain(\"r.status = 'started'\");\n+    expect(roomsMigration).toContain(\"r.expires_at > now()\");\n+  });\n*** End Patch"})
+bash(bun test src/lib/portal-token-route.test.ts src/lib/room-lifecycle.test.ts)
+bash(git diff -- src/app/room/'[roomId]'/page.tsx src/lib/portal-token-route.test.ts supabase/migrations/20260809000000_rooms.sql supabase/migrations/20260809010000_fix_room_code_constraint.sql)
+bash(git diff --check b696ff5..HEAD && git diff --check)
+bash(bun run typecheck)
+bash(bunx biome format --write "src/app/room/[roomId]/page.tsx")
+bash(git diff --check b696ff5..HEAD && git diff --check)
+bash(bun test)
+bash(git status --short && git diff --stat && git diff -- src/app/room/'[roomId]'/page.tsx src/lib/portal-token-route.test.ts supabase/migrations/20260809000000_rooms.sql supabase/migrations/20260809010000_fix_room_code_constraint.sql)
+bash(bun run typecheck)
+read({"filePath":"/home/agent/workspace/src/app/room/[roomId]/page.tsx","offset":1,"limit":20})
+apply_patch({"patchText":"*** Begin Patch\n*** Update File: /home/agent/workspace/src/app/room/[roomId]/page.tsx\n@@\n-};\n-\n+};\n+\n export default function RoomPage() {\n*** End Patch"})
+bash(git diff --numstat -- src/app/room/'[roomId]'/page.tsx && git diff --word-diff=porcelain -- src/app/room/'[roomId]'/page.tsx | grep -n '^[-+].*\r' || true)
+bash(git diff --check)
+The focused tests and typecheck pass. The worktree has broad pre-existing line-ending/formatting changes across unrelated files, so I’m staging only the review fixes and avoiding those unrelated modifications; the repository-wide lint result remains contaminated by that existing state.
+bash(git add src/lib/portal-token-route.test.ts supabase/migrations/20260809000000_rooms.sql supabase/migrations/20260809010000_fix_room_code_constraint.sql && git diff --cached --stat)
+bash(git show HEAD:'src/app/room/[roomId]/page.tsx' | awk 'NR >= 38 && NR <= 78 { print NR ":" $0 }')
+bash(git apply --cached <<'PATCH'
+diff --git a/src/app/room/[roomId]/page.tsx b/src/app/room/[roomId]/page.tsx
+--- a/src/app/room/[roomId]/page.tsx
++++ b/src/app/room/[roomId]/page.tsx
+@@ -49,17 +49,21 @@ export default function RoomPage() {
+       } catch {
+         // The server validates the fallback profile and the submitted values.
+       }
+-      const guest = await fetch("/api/auth/guest", { method: "POST" });
+-      const response = guest.ok
+-        ? await fetch(`/api/rooms/${roomId}/join`, {
+-            method: "POST",
+-            headers: { "content-type": "application/json" },
+-            body: JSON.stringify(profile),
+-          })
+-        : null;
+-      if (!response?.ok) {
++      try {
++        const guest = await fetch("/api/auth/guest", { method: "POST" });
++        const response = guest.ok && room?.status === "lobby"
++          ? await fetch(`/api/rooms/${roomId}/join`, {
++              method: "POST",
++              headers: { "content-type": "application/json" },
++              body: JSON.stringify(profile),
++            })
++          : null;
++        if (!guest.ok || (room?.status === "lobby" && !response?.ok)) {
++          throw new Error("join");
++        }
++        setConfirmed(true);
++      } catch {
+         setJoining(false);
+         setError("No se pudo entrar en la sala.");
+-        return;
+       }
+-      setConfirmed(true);
+@@ -71,7 +75,7 @@ export default function RoomPage() {
+-          <button type="button" className="round-primary" disabled={!room || room.status !== "lobby" || room.humanCount >= room.capacity || joining} onClick={() => void confirmJoin()}>
++          <button type="button" className="round-primary" disabled={!room || (room.status !== "lobby" && room.status !== "started") || (room.status === "lobby" && room.humanCount >= room.capacity) || joining} onClick={() => void confirmJoin()}>
+*** End Patch
+PATCH
+git diff --cached --stat && git diff --cached -- src/app/room/'[roomId]'/page.tsx)
+bash(git apply --cached <<'PATCH'
+diff --git a/src/app/room/[roomId]/page.tsx b/src/app/room/[roomId]/page.tsx
+--- a/src/app/room/[roomId]/page.tsx
++++ b/src/app/room/[roomId]/page.tsx
+@@ -49,17 +49,21 @@
+       } catch {
+         // The server validates the fallback profile and the submitted values.
+       }
+-      const guest = await fetch("/api/auth/guest", { method: "POST" });
+-      const response = guest.ok
+-        ? await fetch(`/api/rooms/${roomId}/join`, {
+-            method: "POST",
+-            headers: { "content-type": "application/json" },
+-            body: JSON.stringify(profile),
+-          })
+-        : null;
+-      if (!response?.ok) {
++      try {
++        const guest = await fetch("/api/auth/guest", { method: "POST" });
++        const response = guest.ok && room?.status === "lobby"
++          ? await fetch(`/api/rooms/${roomId}/join`, {
++              method: "POST",
++              headers: { "content-type": "application/json" },
++              body: JSON.stringify(profile),
++            })
++          : null;
++        if (!guest.ok || (room?.status === "lobby" && !response?.ok)) {
++          throw new Error("join");
++        }
++        setConfirmed(true);
++      } catch {
+         setJoining(false);
+         setError("No se pudo entrar en la sala.");
+-        return;
+       }
+-      setConfirmed(true);
+@@ -74,1 +78,1 @@
+-          <button type="button" className="round-primary" disabled={!room || room.status !== "lobby" || room.humanCount >= room.capacity || joining} onClick={() => void confirmJoin()}>
++          <button type="button" className="round-primary" disabled={!room || (room.status !== "lobby" && room.status !== "started") || (room.status === "lobby" && room.humanCount >= room.capacity) || joining} onClick={() => void confirmJoin()}>
+PATCH
+git diff --cached --stat)
+bash(git add "src/app/room/[roomId]/page.tsx" && git diff --cached --stat && git diff --cached -- src/app/room/'[roomId]'/page.tsx)
+bash(git status --short && git diff --cached --check && git diff --cached --stat && git log --oneline -10)
+bash(git commit -m "fix: preserve active room reconnects")
+bash(GIT_AUTHOR_NAME='OpenCode' GIT_AUTHOR_EMAIL='opencode@localhost' GIT_COMMITTER_NAME='OpenCode' GIT_COMMITTER_EMAIL='opencode@localhost' git commit -m "fix: preserve active room reconnects")
+The fixes are committed as `7302727`. Verification passes for all 64 tests and TypeScript; lint is still blocked by the pre-existing worktree-wide formatting/line-ending changes, not by the staged review fixes. I’m doing the final commit/status check now.
+bash(git show --stat --oneline --decorate HEAD && git show --check --oneline HEAD)
+bash(git status --short --branch)
+bash(bun test && bun run typecheck)
+todowrite({"todos":[{"content":"Inspect branch commits, diff, and repository guidance","status":"completed","priority":"high"},{"content":"Review changed code for correctness, security, and contract compliance","status":"completed","priority":"high"},{"content":"Run relevant tests and apply only necessary fixes","status":"completed","priority":"high"},{"content":"Report findings and completion status","status":"completed","priority":"medium"}]})
+Reviewed and fixed:
+
+- Preserved reconnect access for existing members after rooms start.
+- Prevented Portal tokens for expired or cancelled rooms.
+- Added contract coverage.
+
+Committed as `7302727`.
+
+Tests: 64 passed. Typecheck passed. Lint remains blocked by pre-existing worktree formatting changes.
+
+<promise>COMPLETE</promise>
+Agent stopped
+Syncing 1 commit to host
+Syncing 1 commit to host done (0.0s)
+Collecting commits
+Collecting commits done (0.1s)
+Agent signaled completion after 1 iteration(s).
+Run complete: agent finished after 1 iteration(s).

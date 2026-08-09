@@ -7,8 +7,6 @@ import {
   publicViewFor,
   showResults,
   startCluePhase,
-  startDiscussion,
-  startVoting,
   submitClue,
   submitVote,
   viewFor,
@@ -161,15 +159,6 @@ export async function POST(
       case "submit_clue":
         state = submitClue(state, user.id, body.text ?? "");
         break;
-      case "start_discussion":
-        if (!state.round.clues.has("agent")) {
-          state = submitClue(state, "agent", "naturaleza");
-        }
-        state = startDiscussion(state, user.id);
-        break;
-      case "start_voting":
-        state = startVoting(state, user.id, body.discussion ?? "");
-        break;
       case "submit_vote":
         state = submitVote(state, user.id, body.targetId ?? "");
         if (
@@ -190,7 +179,12 @@ export async function POST(
         });
     }
     state = advanceTimedOutPhase(state);
-  } catch {
+
+    // Auto-advance Agent's turn if it's their turn
+    if (state.phase === "clue_phase" && state.activeTurnId === "agent") {
+      state = submitClue(state, "agent", "naturaleza");
+    }
+  } catch (_err) {
     return NextResponse.json(roomError("room-unavailable"), { status: 409 });
   }
 
