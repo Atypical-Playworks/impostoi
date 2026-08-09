@@ -22,6 +22,7 @@ export async function publishPrivateViews(
               "content-type": "application/json",
             },
             body: JSON.stringify({
+              senderId: userId,
               to: userId,
               type: "match_state",
               content,

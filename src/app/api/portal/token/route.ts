@@ -53,6 +53,26 @@ export async function POST(request: Request) {
   const channelId = roomChannelId(roomCode);
   let response: Response;
   try {
+    const memberRes = await fetch(
+      `${config.portalApiUrl}/v1/channels/${channelId}/members`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${config.portalSecret}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ userId: user.id }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(5_000),
+      },
+    );
+    if (!memberRes.ok) {
+      console.error(
+        `Failed to add member ${user.id} to Portal channel ${channelId}:`,
+        memberRes.status,
+      );
+    }
+
     response = await fetch(`${config.portalApiUrl}/v1/tokens`, {
       method: "POST",
       headers: {
