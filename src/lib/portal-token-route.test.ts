@@ -18,6 +18,15 @@ describe("Portal token route contract", () => {
     expect(route).not.toContain("NEXT_PUBLIC_PORTAL");
   });
 
+  test("requires an active room membership before issuing a token", () => {
+    const roomsMigration = readFileSync(
+      new URL("../../supabase/migrations/20260809000000_rooms.sql", import.meta.url),
+      "utf8",
+    );
+    expect(roomsMigration).toContain("r.status = 'started'");
+    expect(roomsMigration).toContain("r.expires_at > now()");
+  });
+
   test("rejects unauthenticated, invalid, and failed token requests safely", () => {
     expect(route).toContain("status: 401");
     expect(route).toContain("status: 400");

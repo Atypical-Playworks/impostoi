@@ -105,9 +105,11 @@ set search_path = public
 as $$
   select exists (
     select 1
-    from public.room_participants
-    where room_code = upper(requested_code)
-      and player_id = requested_player_id
+    from public.room_participants p
+    join public.rooms r on r.code = p.room_code
+    where p.room_code = upper(requested_code)
+      and p.player_id = requested_player_id
+      and (r.status = 'started' or (r.status = 'lobby' and r.expires_at > now()))
   );
 $$;
 
