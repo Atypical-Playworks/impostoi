@@ -26,7 +26,9 @@ export default function RoomPage() {
     let active = true;
     void fetch(`/api/rooms/${roomId}`)
       .then(async (response) => {
-        const payload = (await response.json()) as PublicRoom | { error?: string };
+        const payload = (await response.json()) as
+          | PublicRoom
+          | { error?: string };
         if (!response.ok || !("code" in payload)) throw new Error("room");
         if (active) setRoom(payload);
       })
@@ -36,7 +38,12 @@ export default function RoomPage() {
     };
   }, [roomId]);
 
-  if (error) return <main className="round-shell"><p role="alert">{error}</p></main>;
+  if (error)
+    return (
+      <main className="round-shell">
+        <p role="alert">{error}</p>
+      </main>
+    );
   if (!confirmed) {
     async function confirmJoin() {
       setJoining(true);
@@ -49,20 +56,24 @@ export default function RoomPage() {
       } catch {
         // The server validates the fallback profile and the submitted values.
       }
-      const guest = await fetch("/api/auth/guest", { method: "POST" });
-      const response = guest.ok
-        ? await fetch(`/api/rooms/${roomId}/join`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(profile),
-          })
-        : null;
-      if (!response?.ok) {
+      try {
+        const guest = await fetch("/api/auth/guest", { method: "POST" });
+        const response =
+          guest.ok && room?.status === "lobby"
+            ? await fetch(`/api/rooms/${roomId}/join`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify(profile),
+              })
+            : null;
+        if (!guest.ok || (room?.status === "lobby" && !response?.ok)) {
+          throw new Error("join");
+        }
+        setConfirmed(true);
+      } catch {
         setJoining(false);
         setError("No se pudo entrar en la sala.");
-        return;
       }
-      setConfirmed(true);
     }
 
     return (
@@ -70,8 +81,22 @@ export default function RoomPage() {
         <section className="round-card lobby-card">
           <p className="eyebrow">Confirmar entrada</p>
           <h1>{room?.code ?? roomId}</h1>
-          <p>{room ? `${room.humanCount}/${room.capacity} jugadores · ${room.agentReady ? "IA lista" : "IA no disponible"}` : "Consultando la sala..."}</p>
-          <button type="button" className="round-primary" disabled={!room || room.status !== "lobby" || room.humanCount >= room.capacity || joining} onClick={() => void confirmJoin()}>
+          <p>
+            {room
+              ? `${room.humanCount}/${room.capacity} jugadores · ${room.agentReady ? "IA lista" : "IA no disponible"}`
+              : "Consultando la sala..."}
+          </p>
+          <button
+            type="button"
+            className="round-primary"
+            disabled={
+              !room ||
+              (room.status !== "lobby" && room.status !== "started") ||
+              (room.status === "lobby" && room.humanCount >= room.capacity) ||
+              joining
+            }
+            onClick={() => void confirmJoin()}
+          >
             {joining ? "Entrando..." : "Confirmar alias y entrar"}
           </button>
         </section>

@@ -1,5 +1,5 @@
 create table public.rooms (
-  code text primary key check (code ~ '^[A-HJ-NP-Z2-9]{6}$'),
+  code text primary key check (code ~ '^[A-HJKMNP-Z2-9]{6}$'),
   host_player_id uuid not null references auth.users(id),
   capacity smallint not null check (capacity in (4, 5)),
   status text not null default 'lobby' check (status in ('lobby', 'started', 'expired', 'cancelled')),
@@ -105,9 +105,11 @@ set search_path = public
 as $$
   select exists (
     select 1
-    from public.room_participants
-    where room_code = upper(requested_code)
-      and player_id = requested_player_id
+    from public.room_participants p
+    join public.rooms r on r.code = p.room_code
+    where p.room_code = upper(requested_code)
+      and p.player_id = requested_player_id
+      and (r.status = 'started' or (r.status = 'lobby' and r.expires_at > now()))
   );
 $$;
 
