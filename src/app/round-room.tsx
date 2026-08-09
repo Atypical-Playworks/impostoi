@@ -34,6 +34,7 @@ type RoundParticipant = {
   avatar: string;
   activity: "idle" | "clue" | "discussion" | "voting";
   isYou?: boolean;
+  isHost?: boolean;
 };
 
 type PlayerProfile = { alias: string; avatar: string };
@@ -365,7 +366,11 @@ function LiveLobby({
                       </strong>
                       <small>
                         <i className={`activity-dot ${participant.activity}`} />
-                        {participant.isYou ? " Anfitrion" : " Conectado"}
+                        {participant.isHost
+                          ? " Anfitrion"
+                          : participant.isYou
+                            ? " Tu"
+                            : " Conectado"}
                       </small>
                     </div>
                   </div>
@@ -408,7 +413,9 @@ function LiveRoundRoom({
   const { messages, ext, me, presence, send, setMetadata, status } =
     useChannel<LiveMessage>({
       channelId,
-      metadata: profile ? { ...profile, activity: "idle" } : {},
+      metadata: profile
+        ? { ...profile, activity: "idle", isHost: lobbyConfig.isHost }
+        : {},
     });
 
   let view: PrivateGameView | null = readLiveMatchView(ext?.match);
@@ -427,6 +434,7 @@ function LiveRoundRoom({
           avatar: profile.avatar,
           activity: "idle",
           isYou: true,
+          isHost: lobbyConfig.isHost,
         }
       : null;
   const hasPortalIdentity = localParticipant !== null;
@@ -451,6 +459,7 @@ function LiveRoundRoom({
       setMetadata({
         alias: profile.alias,
         avatar: profile.avatar,
+        isHost: lobbyConfig.isHost,
         activity:
           view?.phase === "clue_phase"
             ? "clue"
@@ -460,7 +469,7 @@ function LiveRoundRoom({
                 ? "voting"
                 : "idle",
       });
-  }, [me, profile, setMetadata, view?.phase]);
+  }, [lobbyConfig.isHost, me, profile, setMetadata, view?.phase]);
 
   if (!view) {
     const connectedParticipants: RoundParticipant[] =
@@ -479,12 +488,14 @@ function LiveRoundRoom({
               metadata.activity === "voting"
                 ? metadata.activity
                 : "idle";
+            const isHost = metadata.isHost === true;
             return {
               id: participant.id,
               alias,
               avatar,
               activity,
               isYou: participant.id === me?.id,
+              isHost,
             };
           })
         : localParticipant
