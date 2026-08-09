@@ -20,7 +20,10 @@ describe("Portal token route contract", () => {
 
   test("requires an active room membership before issuing a token", () => {
     const roomsMigration = readFileSync(
-      new URL("../../supabase/migrations/20260809000000_rooms.sql", import.meta.url),
+      new URL(
+        "../../supabase/migrations/20260809000000_rooms.sql",
+        import.meta.url,
+      ),
       "utf8",
     );
     expect(roomsMigration).toContain("r.status = 'started'");

@@ -147,7 +147,11 @@ function CreateRoomModal({
     const response = await fetch("/api/rooms", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ capacity, alias: "Gato Ninja", avatar: "#21D4D4" }),
+      body: JSON.stringify({
+        capacity,
+        alias: "Gato Ninja",
+        avatar: "#21D4D4",
+      }),
     });
     const payload = (await response.json()) as { code?: string };
     if (!response.ok || !payload.code) {
@@ -180,12 +184,20 @@ function CreateRoomModal({
           <div className="modal-choice-row">
             <span className="modal-label">Jugadores humanos</span>
             <div className="choice-group">
-                <button type="button" className={capacity === 4 ? "choice active" : "choice"} onClick={() => setCapacity(4)}>
-                  4
-                </button>
-                <button type="button" className={capacity === 5 ? "choice active" : "choice"} onClick={() => setCapacity(5)}>
-                  5
-                </button>
+              <button
+                type="button"
+                className={capacity === 4 ? "choice active" : "choice"}
+                onClick={() => setCapacity(4)}
+              >
+                4
+              </button>
+              <button
+                type="button"
+                className={capacity === 5 ? "choice active" : "choice"}
+                onClick={() => setCapacity(5)}
+              >
+                5
+              </button>
             </div>
           </div>
           <div className="modal-note">
@@ -242,61 +254,61 @@ function JoinRoomModal({
       accent="#21D4D4"
     >
       <div className="modal-stack">
-          <label className="modal-label" htmlFor={roomCodeId}>
-            Codigo de sala
-          </label>
-          <input
-            id={roomCodeId}
-            className="room-input"
-            value={code}
-            maxLength={6}
-            onChange={(event) => setCode(event.target.value.toUpperCase())}
-          />
-          <div className="alias-box">
-            <div>
-              <span className="modal-label">Tu alias para esta partida</span>
-              <strong>Gato Ninja</strong>
-            </div>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="Generar otro alias"
-            >
-              <RefreshCw size={17} />
-            </button>
-          </div>
+        <label className="modal-label" htmlFor={roomCodeId}>
+          Codigo de sala
+        </label>
+        <input
+          id={roomCodeId}
+          className="room-input"
+          value={code}
+          maxLength={6}
+          onChange={(event) => setCode(event.target.value.toUpperCase())}
+        />
+        <div className="alias-box">
           <div>
-            <span className="modal-label">Color de avatar</span>
-            <div className="color-row">
-              {palette.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  className={`color-choice ${avatar === color ? "selected" : ""}`}
-                  style={{ backgroundColor: color }}
-                  aria-label={`Elegir color ${color}`}
-                  onClick={() => setAvatar(color)}
-                >
-                  {avatar === color ? <Check size={17} /> : null}
-                </button>
-              ))}
-            </div>
+            <span className="modal-label">Tu alias para esta partida</span>
+            <strong>Gato Ninja</strong>
           </div>
           <button
             type="button"
-            className="modal-primary cyan"
-            disabled={code.length !== 6}
-            onClick={() => {
-              sessionStorage.setItem(
-                "impostoi_join_profile",
-                JSON.stringify({ alias: "Gato Ninja", avatar }),
-              );
-              onEnter(code);
-            }}
+            className="icon-button"
+            aria-label="Generar otro alias"
           >
-            <LogIn size={20} />
-            Entrar a la sala
+            <RefreshCw size={17} />
           </button>
+        </div>
+        <div>
+          <span className="modal-label">Color de avatar</span>
+          <div className="color-row">
+            {palette.map((color) => (
+              <button
+                key={color}
+                type="button"
+                className={`color-choice ${avatar === color ? "selected" : ""}`}
+                style={{ backgroundColor: color }}
+                aria-label={`Elegir color ${color}`}
+                onClick={() => setAvatar(color)}
+              >
+                {avatar === color ? <Check size={17} /> : null}
+              </button>
+            ))}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="modal-primary cyan"
+          disabled={code.length !== 6}
+          onClick={() => {
+            sessionStorage.setItem(
+              "impostoi_join_profile",
+              JSON.stringify({ alias: "Gato Ninja", avatar }),
+            );
+            onEnter(code);
+          }}
+        >
+          <LogIn size={20} />
+          Entrar a la sala
+        </button>
       </div>
     </Modal>
   );
