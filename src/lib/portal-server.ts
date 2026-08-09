@@ -1,9 +1,6 @@
 import "server-only";
 
-import { Portal } from "@portalsdk/core";
-
 import { roomChannelId } from "@/lib/portal-room";
-import { publicRuntimeConfig } from "@/lib/public-env";
 import { readServerRuntimeConfig } from "@/lib/server-env-config";
 
 export async function publishPrivateViews(
@@ -11,43 +8,37 @@ export async function publishPrivateViews(
   views: readonly { userId: string; content: unknown }[],
 ) {
   const config = readServerRuntimeConfig();
-  const tokenResponse = await fetch(`${config.portalApiUrl}/v1/tokens`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${config.portalSecret}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      userId: views[0]?.userId,
-      channelId: roomChannelId(roomCode),
-    }),
-    cache: "no-store",
-  });
-  if (!tokenResponse.ok) throw new Error("portal-token");
-  const payload = (await tokenResponse.json()) as { token?: string };
-  if (!payload.token) throw new Error("portal-token");
+  const channelId = roomChannelId(roomCode);
 
-  const client = new Portal({
-    apiKey: publicRuntimeConfig.portalKey,
-    token: payload.token,
-  });
-  const channel = client.channel(roomChannelId(roomCode), { history: "none" });
-  channel.acquire();
-  try {
-    await Promise.all(
-      views.map(({ userId, content }) =>
-        channel
-          .send({
-            to: userId,
-            type: "match_state",
-            content,
-          })
-          .catch((err) => {
-            console.error(`Failed to publish private view to ${userId}:`, err);
-          }),
-      ),
-    );
-  } finally {
-    channel.release();
-  }
+  await Promise.all(
+    views.map(async ({ userId, content }) => {
+      try {
+        const response = await fetch(
+          `${config.portalApiUrl}/v1/channels/${channelId}/messages`,
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${config.portalSecret}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              to: userId,
+              type: "match_state",
+              content,
+            }),
+            cache: "no-store",
+            signal: AbortSignal.timeout(5_000),
+          },
+        );
+        if (!response.ok) {
+          const body = await response.text().catch(() => "");
+          console.error(
+            `Failed to publish private view to ${userId}: ${response.status} ${body}`,
+          );
+        }
+      } catch (err) {
+        console.error(`Failed to publish private view to ${userId}:`, err);
+      }
+    }),
+  );
 }
