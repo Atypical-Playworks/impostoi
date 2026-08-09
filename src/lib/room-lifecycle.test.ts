@@ -20,6 +20,10 @@ describe("server room lifecycle contract", () => {
     expect(validateRoomCode("ABC12")).toBe(false);
   });
 
+  test("rejects every ambiguous room-code character", () => {
+    expect(validateRoomCode("ABC12L")).toBe(false);
+  });
+
   test("normalizes shared links before validating them", () => {
     expect(normalizeRoomCode("  abcd23 ")).toBe("ABCD23");
     expect(validateRoomCode(" abcd23 ")).toBe(true);

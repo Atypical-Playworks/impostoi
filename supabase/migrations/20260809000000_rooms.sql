@@ -1,5 +1,5 @@
 create table public.rooms (
-  code text primary key check (code ~ '^[A-HJ-NP-Z2-9]{6}$'),
+  code text primary key check (code ~ '^[A-HJKMNP-Z2-9]{6}$'),
   host_player_id uuid not null references auth.users(id),
   capacity smallint not null check (capacity in (4, 5)),
   status text not null default 'lobby' check (status in ('lobby', 'started', 'expired', 'cancelled')),

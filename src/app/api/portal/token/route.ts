@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { roomChannelId, validateRoomId } from "@/lib/portal-room";
-import { validateRoomCode } from "@/lib/room-lifecycle";
+import { normalizeRoomCode, validateRoomCode } from "@/lib/room-lifecycle";
 import { readServerRuntimeConfig } from "@/lib/server-env-config";
 import {
   createSupabaseAdminClient,
@@ -29,12 +29,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid-room" }, { status: 400 });
   }
 
-  if (
-    !isRecord(body) ||
-    typeof body.roomId !== "string" ||
-    !validateRoomId(body.roomId) ||
-    !validateRoomCode(body.roomId)
-  ) {
+  if (!isRecord(body) || typeof body.roomId !== "string") {
+    return NextResponse.json({ error: "invalid-room" }, { status: 400 });
+  }
+  const roomCode = normalizeRoomCode(body.roomId);
+  if (!validateRoomId(roomCode) || !validateRoomCode(roomCode)) {
     return NextResponse.json({ error: "invalid-room" }, { status: 400 });
   }
 
@@ -42,7 +41,7 @@ export async function POST(request: Request) {
   const admin = createSupabaseAdminClient(config.supabaseSecretKey);
   const { data: isMember, error: membershipError } = await admin.rpc(
     "is_room_member",
-    { requested_code: body.roomId, requested_player_id: user.id },
+    { requested_code: roomCode, requested_player_id: user.id },
   );
   if (membershipError) {
     return NextResponse.json({ error: "room-unavailable" }, { status: 503 });
@@ -51,7 +50,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "access-denied" }, { status: 403 });
   }
 
-  const channelId = roomChannelId(body.roomId);
+  const channelId = roomChannelId(roomCode);
   let response: Response;
   try {
     response = await fetch(`${config.portalApiUrl}/v1/tokens`, {
