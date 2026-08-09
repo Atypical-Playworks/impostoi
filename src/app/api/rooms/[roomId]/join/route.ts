@@ -41,6 +41,9 @@ export async function POST(
   const admin = createSupabaseAdminClient(
     readServerRuntimeConfig().supabaseSecretKey,
   );
+  await admin.rpc("cleanup_stale_room_participants", {
+    requested_code: code,
+  });
   const { data, error } = await admin.rpc("join_room", {
     requested_code: code,
     requested_player_id: user.user.id,

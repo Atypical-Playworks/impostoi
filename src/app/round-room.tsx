@@ -479,6 +479,17 @@ function LiveRoundRoom({
   }, [hasMatchView, hasPortalIdentity, hasPresenceSnapshot]);
 
   useEffect(() => {
+    const heartbeat = () => {
+      void fetch(`/api/rooms/${channelId.replace(/^room-/, "")}/heartbeat`, {
+        method: "POST",
+      });
+    };
+    heartbeat();
+    const interval = window.setInterval(heartbeat, 10_000);
+    return () => window.clearInterval(interval);
+  }, [channelId]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(interval);
   }, []);
