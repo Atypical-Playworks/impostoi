@@ -210,6 +210,7 @@ function LiveLobby({
   onRetry,
   participants,
   roomCode,
+  portalStatus = "connecting",
   capacity = 4,
   agentReady = false,
   isHost = false,
@@ -221,6 +222,7 @@ function LiveLobby({
   onRetry?: () => void;
   participants: RoundParticipant[];
   roomCode: string | null;
+  portalStatus?: string;
   capacity?: 4 | 5;
   agentReady?: boolean;
   isHost?: boolean;
@@ -237,7 +239,11 @@ function LiveLobby({
   const lobbyMessage = loading
     ? null
     : timedOut
-      ? "La conexion esta tardando mas de lo esperado."
+      ? portalStatus === "blocked"
+        ? "Portal rechazo la conexion. Revisa la API key y los permisos del canal."
+        : portalStatus === "ready"
+          ? "Portal conecto, pero aun no entrego la lista de participantes."
+          : `Portal esta en estado ${portalStatus}.`
       : !isHost
         ? "Solo el anfitrion puede comenzar la ronda."
         : !agentReady
@@ -255,7 +261,7 @@ function LiveLobby({
           impostoi <span>ROOM IMPOST</span>
         </div>
         <div className="connection-status">
-          <i /> Portal conectado · Esperando jugadores
+          <i /> Portal: {portalStatus} · Esperando jugadores
         </div>
       </header>
       <div className="round-layout">
@@ -484,6 +490,7 @@ function LiveRoundRoom({
           participants={[]}
           roomCode={channelId.replace(/^room-/, "")}
           {...lobbyConfig}
+          portalStatus={status}
         />
       );
     }
@@ -497,6 +504,7 @@ function LiveRoundRoom({
           roomCode={channelId.replace(/^room-/, "")}
           timedOut
           {...lobbyConfig}
+          portalStatus={status}
         />
       );
     }
@@ -518,6 +526,7 @@ function LiveRoundRoom({
         }
         participants={connectedParticipants}
         roomCode={channelId.replace(/^room-/, "")}
+        portalStatus={status}
         {...lobbyConfig}
       />
     );
