@@ -213,28 +213,29 @@ export async function POST(
       return NextResponse.json(roomError("room-unavailable"), { status: 409 });
     }
 
-    if (state.phase === "clue_phase" && state.activeTurnId === "agent") {
+    const nonNullState = state;
+    if (nonNullState.phase === "clue_phase" && nonNullState.activeTurnId === "agent") {
       const config = readServerRuntimeConfig();
       const adapter = createAgentAdapter({
         apiKey: config.opencodeZenApiKey,
         baseUrl: config.opencodeZenBaseUrl,
       });
 
-      const publicClues = [...state.round.clues.entries()].map(
+      const publicClues = [...nonNullState.round.clues.entries()].map(
         ([id, text]) => ({
-          alias: state.participants.find((p) => p.id === id)?.alias ?? id,
+          alias: nonNullState.participants.find((p) => p.id === id)?.alias ?? id,
           text,
         }),
       );
-      const isImpostor = state.round.impostorId === "agent";
+      const isImpostor = nonNullState.round.impostorId === "agent";
 
       const result = await adapter.act({
         action: "clue",
         model: { id: config.opencodeModel, provider: "opencode", version: "1" },
         strategy: "cautious-imitator",
         role: isImpostor ? "impostor" : "civilian",
-        category: state.round.category,
-        secretWord: isImpostor ? undefined : state.round.secretWord,
+        category: nonNullState.round.category,
+        secretWord: isImpostor ? undefined : nonNullState.round.secretWord,
         clues: publicClues,
         discussion: "",
       });
@@ -244,9 +245,9 @@ export async function POST(
       } else {
         state = submitClue(state, "agent", "naturaleza");
       }
-    } else if (state.phase === "voting") {
+    } else if (nonNullState.phase === "voting") {
       const currentVotes =
-        state.round.votes[state.votingStage ?? "ai_detection"];
+        nonNullState.round.votes[nonNullState.votingStage ?? "ai_detection"];
       if (!currentVotes.has("agent")) {
         const config = readServerRuntimeConfig();
         const adapter = createAgentAdapter({
@@ -254,9 +255,9 @@ export async function POST(
           baseUrl: config.opencodeZenBaseUrl,
         });
 
-        const publicClues = [...state.round.clues.entries()].map(
+        const publicClues = [...nonNullState.round.clues.entries()].map(
           ([id, text]) => ({
-            alias: state.participants.find((p) => p.id === id)?.alias ?? id,
+            alias: nonNullState.participants.find((p) => p.id === id)?.alias ?? id,
             text,
           }),
         );
