@@ -171,15 +171,9 @@ function CreateRoomModal({
     >
       {!created ? (
         <div className="modal-stack">
-          <div className="room-code-box">
-            <div>
-              <span className="modal-label">Codigo de sala</span>
-              <strong>{code}</strong>
-            </div>
-            <button type="button" className="small-button" onClick={copyCode}>
-              {copied ? <Check size={16} /> : <Copy size={16} />}
-              {copied ? "Copiado" : "Copiar"}
-            </button>
+          <div className="modal-note">
+            <Sparkles size={18} color="var(--yellow)" />
+            <span>El codigo se generara al crear la sala.</span>
           </div>
           <div className="modal-choice-row">
             <span className="modal-label">Jugadores humanos</span>
@@ -221,7 +215,13 @@ function CreateRoomModal({
           </div>
           <h3>Sala lista</h3>
           <p>Comparte el codigo para que tus amigos se unan.</p>
-          <strong className="success-code">{code}</strong>
+          <div className="room-code-box">
+            <strong className="success-code">{code}</strong>
+            <button type="button" className="small-button" onClick={copyCode}>
+              {copied ? <Check size={16} /> : <Copy size={16} />}
+              {copied ? "Copiado" : "Copiar"}
+            </button>
+          </div>
           <button
             type="button"
             className="modal-primary"
