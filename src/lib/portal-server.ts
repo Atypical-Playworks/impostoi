@@ -36,11 +36,15 @@ export async function publishPrivateViews(
   try {
     await Promise.all(
       views.map(({ userId, content }) =>
-        channel.send({
-          to: userId,
-          type: "match_state",
-          content,
-        }),
+        channel
+          .send({
+            to: userId,
+            type: "match_state",
+            content,
+          })
+          .catch((err) => {
+            console.error(`Failed to publish private view to ${userId}:`, err);
+          }),
       ),
     );
   } finally {
