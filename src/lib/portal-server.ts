@@ -28,7 +28,7 @@ export async function publishPrivateViews(
               content,
             }),
             cache: "no-store",
-            signal: AbortSignal.timeout(5_000),
+            signal: AbortSignal.timeout(3_000),
           },
         );
         if (!response.ok) {

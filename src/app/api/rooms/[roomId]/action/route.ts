@@ -225,6 +225,7 @@ export async function POST(
       const adapter = createAgentAdapter({
         apiKey: config.opencodeZenApiKey,
         baseUrl: config.opencodeZenBaseUrl,
+        timeoutMs: 4000,
       });
 
       const publicClues = [...nonNullState.round.clues.entries()].map(
@@ -260,6 +261,7 @@ export async function POST(
         const adapter = createAgentAdapter({
           apiKey: config.opencodeZenApiKey,
           baseUrl: config.opencodeZenBaseUrl,
+          timeoutMs: 4000,
         });
 
         const publicClues = [...nonNullState.round.clues.entries()].map(
@@ -331,7 +333,7 @@ export async function POST(
   if (saveError)
     return NextResponse.json(roomError("room-unavailable"), { status: 503 });
 
-  await publishPrivateViews(
+  void publishPrivateViews(
     code,
     participants
       .filter((item) => item.seat_status === "confirmed")
@@ -339,6 +341,8 @@ export async function POST(
         userId: item.player_id,
         content: { type: "state", view: viewFor(state, item.player_id) },
       })),
-  );
+  ).catch((err) => {
+    console.error("Failed background private view dispatch:", err);
+  });
   return NextResponse.json({ ok: true, view: publicViewFor(state) });
 }
