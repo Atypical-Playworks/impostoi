@@ -115,6 +115,15 @@ export default function RoomPage() {
         <p role="alert">{error}</p>
       </main>
     );
+  if (!room)
+    return (
+      <main className="round-shell">
+        <section className="round-card lobby-card">
+          <p className="eyebrow">Cargando sala</p>
+          <h1>Conectando...</h1>
+        </section>
+      </main>
+    );
   if (!confirmed) {
     async function confirmJoin() {
       setJoining(true);

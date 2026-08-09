@@ -54,6 +54,11 @@ function readPlayerProfile(): PlayerProfile | null {
   }
 }
 
+function displayAlias(alias: string, isYou: boolean): string {
+  const cleanAlias = alias.replace(/\s+\(tu\)+$/i, "");
+  return isYou ? `${cleanAlias} (tu)` : cleanAlias;
+}
+
 type LiveSetup =
   | { status: "loading" }
   | { status: "fallback" }
@@ -750,9 +755,9 @@ function LiveRoundRoom({
       ...participant,
       alias: isMaskedPhase
         ? isYou
-          ? `${participant.alias} (tu)`
+          ? displayAlias(participant.alias, true)
           : `Jugador ${index + 1}`
-        : participant.alias,
+        : displayAlias(participant.alias, isYou),
       avatar: isMaskedPhase
         ? isYou
           ? participant.avatar
@@ -770,9 +775,9 @@ function LiveRoundRoom({
     const isYou = p?.id === me?.id;
     const displayName = isMaskedPhase
       ? isYou
-        ? `${p.alias} (tu)`
+        ? displayAlias(p.alias, true)
         : `Jugador ${pIndex + 1}`
-      : c.alias;
+      : displayAlias(c.alias, isYou);
     return {
       alias: displayName,
       text: c.text,
