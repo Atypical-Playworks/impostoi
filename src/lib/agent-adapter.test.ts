@@ -99,7 +99,7 @@ describe("OpenCode Zen Agent adapter", () => {
     expect(result.metadata.responseTimeMs).toBeGreaterThanOrEqual(0);
     expect(wasAborted).toBe(true);
     expect(result.output).toEqual({
-      text: "Mantendré mi pista relacionada con la categoría.",
+      text: "naturaleza",
     });
   });
 
@@ -134,7 +134,7 @@ describe("OpenCode Zen Agent adapter", () => {
 
     expect(result.metadata.fallback).toBe(true);
     expect(result.output).toEqual({
-      text: "Mantendré mi pista relacionada con la categoría.",
+      text: "naturaleza",
     });
     expect(agentReplayEvent(result)).toEqual({
       event_type: "agent_action",

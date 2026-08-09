@@ -46,6 +46,18 @@ describe("runtime environment boundaries", () => {
         SUPABASE_SECRET_KEY: "supabase-secret",
         PORTAL_SECRET: "portal-secret",
       }),
-    ).toThrow("OPENCODE_ZEN_API_KEY");
+    ).toThrow("OPENAI_API_KEY or OPENCODE_ZEN_API_KEY");
+
+    expect(
+      readServerRuntimeConfig({
+        SUPABASE_SECRET_KEY: "supabase-secret",
+        PORTAL_SECRET: "portal-secret",
+        OPENAI_API_KEY: "openai-key",
+      }),
+    ).toMatchObject({
+      agentApiKey: "openai-key",
+      agentBaseUrl: "https://api.openai.com/v1",
+      agentModel: "gpt-4o-mini",
+    });
   });
 });

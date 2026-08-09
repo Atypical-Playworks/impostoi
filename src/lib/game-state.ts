@@ -248,7 +248,10 @@ export function submitClue(
 ): GameState {
   requireParticipant(state, actorId);
   requirePhase(state, "clue_phase");
-  requirePhaseOpen(state, now);
+  const isAgent =
+    state.participants.find((participant) => participant.id === actorId)
+      ?.kind === "agent";
+  if (!isAgent) requirePhaseOpen(state, now);
   if (actorId !== state.activeTurnId) throw new GameStateError("not-your-turn");
 
   const trimmed = text.trim();

@@ -55,7 +55,7 @@ function readPlayerProfile(): PlayerProfile | null {
 }
 
 function displayAlias(alias: string, isYou: boolean): string {
-  const cleanAlias = alias.replace(/\s+\(tu\)+$/i, "");
+  const cleanAlias = alias.replace(/(?:\s+\(tu\))+$/i, "");
   return isYou ? `${cleanAlias} (tu)` : cleanAlias;
 }
 
@@ -887,6 +887,7 @@ function LiveRoundRoom({
             <Voting
               stage={stage}
               participantList={participants}
+              clues={maskedClues}
               selected={selectedVote}
               submitted={Boolean(sentVotes[stage] || view.ownVotes[stage])}
               votes={{}}
@@ -1043,6 +1044,7 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
             <Voting
               stage={votingStage}
               participantList={[]}
+              clues={clues}
               selected={selectedVote}
               submitted={voteSubmitted}
               votes={votes}
@@ -1248,6 +1250,7 @@ function CluePhase({
 function Voting({
   stage,
   participantList,
+  clues,
   selected,
   submitted,
   votes,
@@ -1257,6 +1260,7 @@ function Voting({
 }: {
   stage: VotingStage;
   participantList: readonly RoundParticipant[];
+  clues: readonly { alias: string; text: string }[];
   selected: string | null;
   submitted: boolean;
   votes: Partial<Record<VotingStage, string>>;
@@ -1274,6 +1278,20 @@ function Voting({
         <span className={stage === "impostor" ? "active" : ""}>
           2 <small>Impostor</small>
         </span>
+      </div>
+      <div className="round-card voting-clues">
+        <div className="card-title">
+          <MessageCircle size={21} />
+          <h2>Respuestas de la ronda</h2>
+        </div>
+        <div className="voting-clue-list">
+          {clues.map((clue) => (
+            <div className="voting-clue-row" key={clue.alias}>
+              <strong>{clue.alias}</strong>
+              <span>{clue.text}</span>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="round-card vote-card">
         <p className="eyebrow">

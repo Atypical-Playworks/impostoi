@@ -104,7 +104,7 @@ function parseOutput(action: AgentAction, object: unknown): AgentOutput {
 function fallbackFor(request: AgentRequest): AgentOutput {
   switch (request.action) {
     case "clue":
-      return { text: "Mantendré mi pista relacionada con la categoría." };
+      return { text: "naturaleza" };
     case "discussion":
       return { text: "Mi pista sigue siendo coherente con la categoría." };
     case "vote":

@@ -1463,6 +1463,34 @@ button {
 .clue-row span {
   color: white;
 }
+.voting-clues {
+  display: grid;
+  gap: 14px;
+}
+.voting-clues .card-title {
+  margin-bottom: 0;
+}
+.voting-clue-list {
+  display: grid;
+  gap: 8px;
+}
+.voting-clue-row {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #5221a1;
+  border-radius: 10px;
+  background: rgb(39 10 92 / 70%);
+}
+.voting-clue-row strong {
+  color: var(--cyan);
+}
+.voting-clue-row span {
+  min-width: 0;
+  color: white;
+  overflow-wrap: anywhere;
+}
 .discussion-banner {
   display: flex;
   align-items: center;
@@ -1704,5 +1732,32 @@ button {
   }
   .participant-list {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 561px) and (max-width: 1200px) {
+  .site-header {
+    min-height: 350px;
+  }
+  .brand-lockup {
+    padding-top: 110px;
+  }
+  .hero-actions {
+    grid-template-columns: 1fr;
+    width: min(760px, 100%);
+    gap: 18px;
+  }
+  .hero-copy strong {
+    white-space: normal;
+  }
+  .info-bar {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 520px) {
+  .voting-clue-row {
+    grid-template-columns: 1fr;
+    gap: 3px;
   }
 }

@@ -156,4 +156,21 @@ describe("server-authoritative game state", () => {
     expect(reveal.phase).toBe("reveal");
     expect(reveal.phaseDeadlineAt).toBeUndefined();
   });
+
+  test("allows the server Agent to answer after its turn deadline", () => {
+    let state = readyGame();
+    for (let i = 0; i < 4; i++) {
+      state = advanceTimedOutPhase(state, state.phaseDeadlineAt as number);
+    }
+
+    const answered = submitClue(
+      state,
+      "agent",
+      "naturaleza",
+      (state.phaseDeadlineAt as number) + 1,
+    );
+
+    expect(answered.phase).toBe("voting");
+    expect(answered.round.clues.get("agent")).toBe("naturaleza");
+  });
 });

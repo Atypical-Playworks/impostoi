@@ -213,7 +213,14 @@ export async function POST(
     if (!state)
       return NextResponse.json(roomError("room-unavailable"), { status: 409 });
 
-    state = advanceTimedOutPhase(state);
+    const agentTurnExpired = Boolean(
+      state?.phase === "clue_phase" &&
+        state.activeTurnId === "agent" &&
+        activeTurnBeforeAction === "agent" &&
+        state.phaseDeadlineAt !== undefined &&
+        Date.now() >= state.phaseDeadlineAt,
+    );
+    if (!agentTurnExpired) state = advanceTimedOutPhase(state);
     if (!state) {
       return NextResponse.json(roomError("room-unavailable"), { status: 409 });
     }
@@ -222,7 +229,7 @@ export async function POST(
     if (
       nonNullState.phase === "clue_phase" &&
       nonNullState.activeTurnId === "agent" &&
-      activeTurnBeforeAction !== "agent"
+      agentTurnExpired
     ) {
       const { data: claimed, error: claimError } = await admin.rpc(
         "claim_agent_turn",
@@ -241,8 +248,8 @@ export async function POST(
       } else {
         const config = readServerRuntimeConfig();
         const adapter = createAgentAdapter({
-          apiKey: config.opencodeZenApiKey,
-          baseUrl: config.opencodeZenBaseUrl,
+          apiKey: config.agentApiKey,
+          baseUrl: config.agentBaseUrl,
           timeoutMs: 4000,
         });
 
@@ -258,7 +265,7 @@ export async function POST(
         const result = await adapter.act({
           action: "clue",
           model: {
-            id: config.opencodeModel,
+            id: config.agentModel,
             provider: "opencode",
             version: "1",
           },
@@ -270,14 +277,16 @@ export async function POST(
           discussion: "",
         });
 
-        if (result.action === "clue" && "text" in result.output) {
-          state = submitClue(state, "agent", result.output.text);
-        } else {
-          state = submitClue(state, "agent", "naturaleza");
-        }
+        const generatedClue =
+          result.action === "clue" && "text" in result.output
+            ? result.output.text.trim().split(/\s+/)[0]
+            : "naturaleza";
+        state = submitClue(state, "agent", generatedClue || "naturaleza");
         console.info("Agent clue completed", {
           roomCode: code,
           round: nonNullState.roundNumber,
+          model: config.agentModel,
+          baseUrl: config.agentBaseUrl,
           fallback: result.metadata.fallback,
           responseTimeMs: result.metadata.responseTimeMs,
         });
@@ -303,8 +312,8 @@ export async function POST(
         } else {
           const config = readServerRuntimeConfig();
           const adapter = createAgentAdapter({
-            apiKey: config.opencodeZenApiKey,
-            baseUrl: config.opencodeZenBaseUrl,
+            apiKey: config.agentApiKey,
+            baseUrl: config.agentBaseUrl,
             timeoutMs: 4000,
           });
 
@@ -319,7 +328,7 @@ export async function POST(
           const result = await adapter.act({
             action: "vote",
             model: {
-              id: config.opencodeModel,
+              id: config.agentModel,
               provider: "opencode",
               version: "1",
             },

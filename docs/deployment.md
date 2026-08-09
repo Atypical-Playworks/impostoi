@@ -32,11 +32,13 @@ The workflow expects these Google Secret Manager secrets to exist:
 
 - `impostoi-supabase-secret-key`
 - `impostoi-portal-secret`
+- `impostoi-openai-key`
 - `impostoi-opencode-zen-key`
 
 They are injected into Cloud Run as `SUPABASE_SECRET_KEY`, `PORTAL_SECRET`,
-and `OPENCODE_ZEN_API_KEY`. `DATABASE_URL_PROD` is never passed to Cloud Run,
-Docker, or the built image.
+`OPENAI_API_KEY`, and `OPENCODE_ZEN_API_KEY`. OpenAI is the primary Agent
+provider; Zen remains available as a fallback configuration. `DATABASE_URL_PROD`
+is never passed to Cloud Run, Docker, or the built image.
 
 ## Google Cloud permissions
 
@@ -44,7 +46,7 @@ The deployer service account needs:
 
 - `roles/artifactregistry.writer` on the `impostoi-registry` repository
 - `roles/run.admin` on the project
-- `roles/secretmanager.secretAccessor` on the three runtime secrets
+- `roles/secretmanager.secretAccessor` on the four runtime secrets
 - `roles/iam.serviceAccountUser` for the Cloud Run runtime service account
 - `roles/serviceusage.serviceUsageConsumer` on the project
 
