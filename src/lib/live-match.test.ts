@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { liveAction, readLiveMatchView } from "./live-match";
+import { canStartLobby, liveAction, readLiveMatchView } from "./live-match";
 
 const view = {
   matchId: "match-1",
@@ -16,6 +16,21 @@ const view = {
 };
 
 describe("live match Portal events", () => {
+  test("only enables lobby start when all start requirements are met", () => {
+    expect(
+      canStartLobby({ participantCount: 3, agentReady: true, isHost: true }),
+    ).toBe(false);
+    expect(
+      canStartLobby({ participantCount: 4, agentReady: false, isHost: true }),
+    ).toBe(false);
+    expect(
+      canStartLobby({ participantCount: 4, agentReady: true, isHost: false }),
+    ).toBe(false);
+    expect(
+      canStartLobby({ participantCount: 4, agentReady: true, isHost: true }),
+    ).toBe(true);
+  });
+
   test("accepts only a private game snapshot or state event", () => {
     expect(readLiveMatchView({ type: "snapshot", view })).toEqual(view);
     expect(readLiveMatchView({ type: "chat", view })).toBeNull();

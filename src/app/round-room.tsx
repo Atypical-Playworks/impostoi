@@ -20,8 +20,7 @@ import type {
   PrivateGameView,
   VotingStage,
 } from "@/lib/game-state";
-import { liveAction, readLiveMatchView } from "@/lib/live-match";
-import { publicRuntimeConfig } from "@/lib/public-env";
+import { canStartLobby, liveAction, readLiveMatchView } from "@/lib/live-match";
 import {
   canSubmitClue,
   formatTimer,
@@ -69,30 +68,49 @@ type LiveSetup =
   | { status: "error" }
   | { status: "ready"; client: Portal; token: string };
 
+type LobbyConfig = {
+  capacity: 4 | 5;
+  agentReady: boolean;
+  isHost: boolean;
+};
+
+type PublicRuntimeConfig = {
+  supabaseUrl: string;
+  supabasePublishableKey: string;
+  portalKey: string;
+};
+
 export function RoundRoom({
   onLeave,
   roomId = "IMPOST",
+  lobbyConfig = { capacity: 4, agentReady: false, isHost: false },
 }: {
   onLeave: () => void;
   roomId?: string;
+  lobbyConfig?: LobbyConfig;
 }) {
   const [setup, setSetup] = useState<LiveSetup>({ status: "loading" });
   const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
     if (retryNonce > 0) setSetup({ status: "loading" });
-    if (
-      !publicRuntimeConfig.portalKey ||
-      !publicRuntimeConfig.supabaseUrl ||
-      !publicRuntimeConfig.supabasePublishableKey
-    ) {
-      setSetup({ status: "fallback" });
-      return;
-    }
 
     let active = true;
     async function connect() {
       try {
+        const configResponse = await fetch("/api/config", {
+          cache: "no-store",
+        });
+        if (!configResponse.ok) throw new Error("public-config");
+        const config = (await configResponse.json()) as PublicRuntimeConfig;
+        if (
+          !config.portalKey ||
+          !config.supabaseUrl ||
+          !config.supabasePublishableKey
+        ) {
+          if (active) setSetup({ status: "fallback" });
+          return;
+        }
         const guest = await fetch("/api/auth/guest", { method: "POST" });
         if (!guest.ok) throw new Error("guest-session");
         const tokenResponse = await fetch("/api/portal/token", {
@@ -106,7 +124,7 @@ export function RoundRoom({
         if (active) {
           setSetup({
             status: "ready",
-            client: new Portal({ apiKey: publicRuntimeConfig.portalKey }),
+            client: new Portal({ apiKey: config.portalKey }),
             token: payload.token,
           });
         }
@@ -137,6 +155,7 @@ export function RoundRoom({
         onStart={() => undefined}
         participants={[]}
         roomCode={null}
+        {...lobbyConfig}
       />
     );
   }
@@ -153,6 +172,7 @@ export function RoundRoom({
       <LiveRoundRoom
         key={`${roomId}-${retryNonce}`}
         channelId={`room-${roomId}`}
+        lobbyConfig={lobbyConfig}
         onLeave={onLeave}
         onRetry={() => setRetryNonce((current) => current + 1)}
       />
@@ -190,6 +210,9 @@ function LiveLobby({
   onRetry,
   participants,
   roomCode,
+  capacity = 4,
+  agentReady = false,
+  isHost = false,
   loading = false,
   timedOut = false,
 }: {
@@ -198,10 +221,30 @@ function LiveLobby({
   onRetry?: () => void;
   participants: RoundParticipant[];
   roomCode: string | null;
+  capacity?: 4 | 5;
+  agentReady?: boolean;
+  isHost?: boolean;
   loading?: boolean;
   timedOut?: boolean;
 }) {
   const isPending = loading || timedOut;
+  const canStart = canStartLobby({
+    participantCount: participants.length,
+    agentReady,
+    isHost,
+  });
+  const startDisabled = isPending || !canStart;
+  const lobbyMessage = loading
+    ? null
+    : timedOut
+      ? "La conexion esta tardando mas de lo esperado."
+      : !isHost
+        ? "Solo el anfitrion puede comenzar la ronda."
+        : !agentReady
+          ? "La IA aun no esta lista."
+          : participants.length < 4
+            ? `Faltan ${4 - participants.length} jugadores para comenzar.`
+            : "Comparte el codigo para que tus amigos se unan.";
   return (
     <main className="round-shell">
       <header className="round-header">
@@ -239,7 +282,7 @@ function LiveLobby({
             {timedOut ? (
               <>
                 <h2>No pudimos cargar la sala</h2>
-                <p>La conexion esta tardando mas de lo esperado.</p>
+                <p>{lobbyMessage}</p>
                 <button
                   type="button"
                   className="round-primary"
@@ -254,12 +297,12 @@ function LiveLobby({
                 {loading ? (
                   <span className="skeleton-line lobby-title-skeleton" />
                 ) : (
-                  <p>Comparte el codigo para que tus amigos se unan.</p>
+                  <p>{lobbyMessage}</p>
                 )}
                 <button
                   type="button"
                   className="round-primary"
-                  disabled={loading}
+                  disabled={startDisabled}
                   onClick={onStart}
                 >
                   {loading ? "Cargando sala..." : "Comenzar ronda"}
@@ -276,7 +319,9 @@ function LiveLobby({
             {loading ? (
               <span className="skeleton-line participant-count-skeleton" />
             ) : (
-              <span>{participants.length}/6</span>
+              <span>
+                {participants.length}/{capacity}
+              </span>
             )}
           </div>
           <div className="participant-list">
@@ -330,10 +375,12 @@ type LiveMessage = {
 
 function LiveRoundRoom({
   channelId,
+  lobbyConfig,
   onLeave,
   onRetry,
 }: {
   channelId: string;
+  lobbyConfig: LobbyConfig;
   onLeave: () => void;
   onRetry: () => void;
 }) {
@@ -424,6 +471,7 @@ function LiveRoundRoom({
           onStart={() => undefined}
           participants={[]}
           roomCode={channelId.replace(/^room-/, "")}
+          {...lobbyConfig}
         />
       );
     }
@@ -436,20 +484,29 @@ function LiveRoundRoom({
           participants={[]}
           roomCode={channelId.replace(/^room-/, "")}
           timedOut
+          {...lobbyConfig}
         />
       );
     }
+    const canStart = canStartLobby({
+      participantCount: connectedParticipants.length,
+      agentReady: lobbyConfig.agentReady,
+      isHost: lobbyConfig.isHost,
+    });
     return (
       <LiveLobby
         onLeave={onLeave}
         onStart={() =>
-          void send({
-            content: liveAction("start_clue_phase"),
-            type: "match_action",
-          })
+          canStart
+            ? void send({
+                content: liveAction("start_clue_phase"),
+                type: "match_action",
+              })
+            : undefined
         }
         participants={connectedParticipants}
         roomCode={channelId.replace(/^room-/, "")}
+        {...lobbyConfig}
       />
     );
   }

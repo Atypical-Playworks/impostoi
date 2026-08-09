@@ -6,7 +6,10 @@ import {
   validateRoomCode,
 } from "@/lib/room-lifecycle";
 import { readServerRuntimeConfig } from "@/lib/server-env-config";
-import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import {
+  createSupabaseAdminClient,
+  createSupabaseServerClient,
+} from "@/lib/supabase/server";
 
 export async function GET(
   _request: Request,
@@ -23,5 +26,19 @@ export async function GET(
   });
   if (error || !data)
     return NextResponse.json(roomError("room-unavailable"), { status: 503 });
-  return NextResponse.json(data);
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: room } = user
+    ? await admin
+        .from("rooms")
+        .select("host_player_id")
+        .eq("code", code)
+        .maybeSingle()
+    : { data: null };
+  return NextResponse.json({
+    ...data,
+    isHost: user !== null && room?.host_player_id === user.id,
+  });
 }

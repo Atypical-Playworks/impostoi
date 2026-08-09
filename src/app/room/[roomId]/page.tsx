@@ -11,6 +11,7 @@ type PublicRoom = {
   humanCount: number;
   status: "lobby" | "started" | "expired" | "cancelled";
   agentReady: boolean;
+  isHost: boolean;
 };
 
 export default function RoomPage() {
@@ -112,5 +113,15 @@ export default function RoomPage() {
     );
   }
 
-  return <RoundRoom roomId={roomId} onLeave={() => router.push("/")} />;
+  return (
+    <RoundRoom
+      roomId={roomId}
+      lobbyConfig={{
+        capacity: room?.capacity ?? 4,
+        agentReady: room?.agentReady ?? false,
+        isHost: room?.isHost ?? false,
+      }}
+      onLeave={() => router.push("/")}
+    />
+  );
 }

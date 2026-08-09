@@ -12,6 +12,14 @@ export type LiveActionName =
   | "submit_vote"
   | "show_results";
 
+export function canStartLobby(input: {
+  participantCount: number;
+  agentReady: boolean;
+  isHost: boolean;
+}): boolean {
+  return input.participantCount >= 4 && input.agentReady && input.isHost;
+}
+
 export function readLiveMatchView(value: unknown): PrivateGameView | null {
   if (!isRecord(value)) return null;
   if (value.type !== "snapshot" && value.type !== "state") return null;
