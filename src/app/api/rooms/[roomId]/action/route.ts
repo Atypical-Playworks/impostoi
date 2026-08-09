@@ -214,7 +214,10 @@ export async function POST(
     }
 
     const nonNullState = state;
-    if (nonNullState.phase === "clue_phase" && nonNullState.activeTurnId === "agent") {
+    if (
+      nonNullState.phase === "clue_phase" &&
+      nonNullState.activeTurnId === "agent"
+    ) {
       const config = readServerRuntimeConfig();
       const adapter = createAgentAdapter({
         apiKey: config.opencodeZenApiKey,
@@ -223,7 +226,8 @@ export async function POST(
 
       const publicClues = [...nonNullState.round.clues.entries()].map(
         ([id, text]) => ({
-          alias: nonNullState.participants.find((p) => p.id === id)?.alias ?? id,
+          alias:
+            nonNullState.participants.find((p) => p.id === id)?.alias ?? id,
           text,
         }),
       );
@@ -257,7 +261,8 @@ export async function POST(
 
         const publicClues = [...nonNullState.round.clues.entries()].map(
           ([id, text]) => ({
-            alias: nonNullState.participants.find((p) => p.id === id)?.alias ?? id,
+            alias:
+              nonNullState.participants.find((p) => p.id === id)?.alias ?? id,
             text,
           }),
         );

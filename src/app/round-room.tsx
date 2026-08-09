@@ -1004,7 +1004,7 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
             <Results
               roundNumber={1}
               isHost={true}
-              onNext={() => setPhase("lobby" as any)}
+              onNext={() => setPhase("lobby")}
             />
           ) : null}
         </section>
