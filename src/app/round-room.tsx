@@ -14,6 +14,7 @@ import {
   Target,
   Users,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import type {
   MatchPhase,
@@ -215,6 +216,7 @@ function LiveLobby({
   roomCode,
   roomId,
   portalStatus = "connecting",
+  transferHost,
   capacity = 4,
   agentReady = false,
   isHost = false,
@@ -228,6 +230,7 @@ function LiveLobby({
   roomCode: string | null;
   roomId: string;
   portalStatus?: string;
+  transferHost?: ReactNode;
   capacity?: 4 | 5;
   agentReady?: boolean;
   isHost?: boolean;
@@ -258,6 +261,7 @@ function LiveLobby({
             : "Comparte el codigo para que tus amigos se unan.";
   return (
     <main className="round-shell">
+      {transferHost}
       <header className="round-header">
         <button type="button" className="back-button" onClick={onLeave}>
           <ChevronLeft size={18} /> Salir de la sala
@@ -390,6 +394,24 @@ type LiveMessage = {
   [key: string]: unknown;
 };
 
+function LobbyHostTransfer({
+  roomCode,
+  shouldTransfer,
+}: {
+  roomCode: string;
+  shouldTransfer: boolean;
+}) {
+  useEffect(() => {
+    if (!shouldTransfer) return;
+    void fetch(`/api/rooms/${roomCode}/host`, {
+      method: "POST",
+    }).then((response) => {
+      if (response.ok) window.location.reload();
+    });
+  }, [roomCode, shouldTransfer]);
+  return null;
+}
+
 function LiveRoundRoom({
   channelId,
   lobbyConfig,
@@ -501,6 +523,10 @@ function LiveRoundRoom({
         : localParticipant
           ? [localParticipant]
           : [];
+    const currentHost = connectedParticipants.find(
+      (participant) => participant.isHost,
+    );
+    const nextHost = connectedParticipants[0];
     if (!hasPresenceSnapshot && !hasPortalIdentity && !lobbyTimedOut) {
       return (
         <LiveLobby
@@ -538,6 +564,14 @@ function LiveRoundRoom({
     });
     return (
       <LiveLobby
+        transferHost={
+          <LobbyHostTransfer
+            roomCode={channelId.replace(/^room-/, "")}
+            shouldTransfer={
+              hasPresenceSnapshot && !currentHost && nextHost?.id === me?.id
+            }
+          />
+        }
         onLeave={onLeave}
         onStart={() =>
           canStart
