@@ -36,31 +36,21 @@ type RoundParticipant = {
   isYou?: boolean;
 };
 
-const participants: RoundParticipant[] = [
-  {
-    id: "p1",
-    alias: "Gato Ninja",
-    avatar: "#21D4D4",
-    activity: "clue",
-    isYou: true,
-  },
-  { id: "p2", alias: "Luna Pixel", avatar: "#F43FA7", activity: "clue" },
-  { id: "p3", alias: "Sol Rebelde", avatar: "#FFD43B", activity: "idle" },
-  { id: "p4", alias: "Rio Turbo", avatar: "#7C3AED", activity: "idle" },
-  { id: "p5", alias: "Nube", avatar: "#10B981", activity: "clue" },
-];
+type PlayerProfile = { alias: string; avatar: string };
 
-const starterClues = [
-  { alias: "Luna Pixel", text: "Tiene una cola muy inquieta." },
-  { alias: "Nube", text: "Le gusta explorar de noche." },
-];
-
-const activityLabels = {
-  idle: "Listo",
-  clue: "Escribiendo pista",
-  discussion: "En la charla",
-  voting: "Votando",
-};
+function readPlayerProfile(): PlayerProfile | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = JSON.parse(
+      sessionStorage.getItem("impostoi_join_profile") ?? "null",
+    ) as Partial<PlayerProfile> | null;
+    return value?.alias && value.avatar
+      ? { alias: value.alias, avatar: value.avatar }
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 type LiveSetup =
   | { status: "loading" }
@@ -82,11 +72,11 @@ type PublicRuntimeConfig = {
 
 export function RoundRoom({
   onLeave,
-  roomId = "IMPOST",
+  roomId,
   lobbyConfig = { capacity: 4, agentReady: false, isHost: false },
 }: {
   onLeave: () => void;
-  roomId?: string;
+  roomId: string;
   lobbyConfig?: LobbyConfig;
 }) {
   const [setup, setSetup] = useState<LiveSetup>({ status: "loading" });
@@ -98,6 +88,10 @@ export function RoundRoom({
     let active = true;
     async function connect() {
       try {
+        if (!readPlayerProfile()) {
+          if (active) setSetup({ status: "error" });
+          return;
+        }
         const configResponse = await fetch("/api/config", {
           cache: "no-store",
         });
@@ -142,6 +136,7 @@ export function RoundRoom({
     return (
       <RoundConnection
         onLeave={onLeave}
+        roomId={roomId}
         label="Configura las variables publicas para conectar la sala"
       />
     );
@@ -155,6 +150,7 @@ export function RoundRoom({
         onStart={() => undefined}
         participants={[]}
         roomCode={null}
+        roomId={roomId}
         {...lobbyConfig}
       />
     );
@@ -163,6 +159,7 @@ export function RoundRoom({
     return (
       <RoundConnection
         onLeave={onLeave}
+        roomId={roomId}
         label="No se pudo conectar con la sala"
       />
     );
@@ -182,9 +179,11 @@ export function RoundRoom({
 
 function RoundConnection({
   onLeave,
+  roomId,
   label,
 }: {
   onLeave: () => void;
+  roomId: string;
   label: string;
 }) {
   return (
@@ -194,7 +193,7 @@ function RoundConnection({
           <ChevronLeft size={18} /> Salir de la sala
         </button>
         <div className="round-brand">
-          impostoi <span>ROOM IMPOST</span>
+          impostoi <span>ROOM {roomId}</span>
         </div>
         <div className="connection-status">
           <i /> {label}
@@ -210,6 +209,7 @@ function LiveLobby({
   onRetry,
   participants,
   roomCode,
+  roomId,
   portalStatus = "connecting",
   capacity = 4,
   agentReady = false,
@@ -222,6 +222,7 @@ function LiveLobby({
   onRetry?: () => void;
   participants: RoundParticipant[];
   roomCode: string | null;
+  roomId: string;
   portalStatus?: string;
   capacity?: 4 | 5;
   agentReady?: boolean;
@@ -258,7 +259,7 @@ function LiveLobby({
           <ChevronLeft size={18} /> Salir de la sala
         </button>
         <div className="round-brand">
-          impostoi <span>ROOM IMPOST</span>
+          impostoi <span>ROOM {roomId}</span>
         </div>
         <div className="connection-status">
           <i /> Portal: {portalStatus} · Esperando jugadores
@@ -284,7 +285,9 @@ function LiveLobby({
             >
               {!isPending && <Sparkles size={32} />}
             </span>
-            <p className="eyebrow">Eres el anfitrion</p>
+            <p className="eyebrow">
+              {isHost ? "Eres el anfitrion" : "Sala de espera"}
+            </p>
             {timedOut ? (
               <>
                 <h2>No pudimos cargar la sala</h2>
@@ -398,10 +401,11 @@ function LiveRoundRoom({
   const [sentVotes, setSentVotes] = useState<
     Partial<Record<VotingStage, boolean>>
   >({});
+  const [profile] = useState<PlayerProfile | null>(() => readPlayerProfile());
   const { messages, ext, me, presence, send, setMetadata, status } =
     useChannel<LiveMessage>({
       channelId,
-      metadata: { alias: "Gato Ninja", avatar: "#21D4D4", activity: "idle" },
+      metadata: profile ? { ...profile, activity: "idle" } : {},
     });
 
   let view: PrivateGameView | null = readLiveMatchView(ext?.match);
@@ -412,15 +416,16 @@ function LiveRoundRoom({
 
   const hasMatchView = view !== null;
   const hasPresenceSnapshot = presence?.kind === "detailed";
-  const localParticipant: RoundParticipant | null = me
-    ? {
-        id: me.id,
-        alias: "Gato Ninja",
-        avatar: "#21D4D4",
-        activity: "idle",
-        isYou: true,
-      }
-    : null;
+  const localParticipant: RoundParticipant | null =
+    me && profile
+      ? {
+          id: me.id,
+          alias: profile.alias,
+          avatar: profile.avatar,
+          activity: "idle",
+          isYou: true,
+        }
+      : null;
   const hasPortalIdentity = localParticipant !== null;
   const [lobbyTimedOut, setLobbyTimedOut] = useState(false);
 
@@ -439,10 +444,10 @@ function LiveRoundRoom({
   }, []);
 
   useEffect(() => {
-    if (me)
+    if (me && profile)
       setMetadata({
-        alias: "Gato Ninja",
-        avatar: "#21D4D4",
+        alias: profile.alias,
+        avatar: profile.avatar,
         activity:
           view?.phase === "clue_phase"
             ? "clue"
@@ -452,7 +457,7 @@ function LiveRoundRoom({
                 ? "voting"
                 : "idle",
       });
-  }, [me, setMetadata, view?.phase]);
+  }, [me, profile, setMetadata, view?.phase]);
 
   if (!view) {
     const connectedParticipants: RoundParticipant[] =
@@ -460,9 +465,11 @@ function LiveRoundRoom({
         ? presence.participants.map((participant) => {
             const metadata = participant.metadata ?? {};
             const alias =
-              typeof metadata.alias === "string" ? metadata.alias : "Jugador";
+              typeof metadata.alias === "string"
+                ? metadata.alias
+                : (participant.username ?? "Participante");
             const avatar =
-              typeof metadata.avatar === "string" ? metadata.avatar : "#21D4D4";
+              typeof metadata.avatar === "string" ? metadata.avatar : "#888888";
             const activity =
               metadata.activity === "clue" ||
               metadata.activity === "discussion" ||
@@ -489,6 +496,7 @@ function LiveRoundRoom({
           onStart={() => undefined}
           participants={[]}
           roomCode={channelId.replace(/^room-/, "")}
+          roomId={channelId.replace(/^room-/, "")}
           {...lobbyConfig}
           portalStatus={status}
         />
@@ -502,6 +510,7 @@ function LiveRoundRoom({
           onStart={() => undefined}
           participants={localParticipant ? [localParticipant] : []}
           roomCode={channelId.replace(/^room-/, "")}
+          roomId={channelId.replace(/^room-/, "")}
           timedOut
           {...lobbyConfig}
           portalStatus={status}
@@ -526,6 +535,7 @@ function LiveRoundRoom({
         }
         participants={connectedParticipants}
         roomCode={channelId.replace(/^room-/, "")}
+        roomId={channelId.replace(/^room-/, "")}
         portalStatus={status}
         {...lobbyConfig}
       />
@@ -562,7 +572,7 @@ function LiveRoundRoom({
           <ChevronLeft size={18} /> Salir de la sala
         </button>
         <div className="round-brand">
-          impostoi <span>ROOM IMPOST</span>
+          impostoi <span>ROOM {channelId.replace(/^room-/, "")}</span>
         </div>
         <div className="connection-status">
           <i /> {status === "ready" ? "Portal conectado" : status}
@@ -585,8 +595,24 @@ function LiveRoundRoom({
             </div>
           </div>
           {view.phase === "lobby" ? (
-            <Lobby
-              onStart={() => void submit(liveAction("start_clue_phase"))}
+            <LiveLobby
+              onLeave={onLeave}
+              onStart={() =>
+                canStartLobby({
+                  participantCount: participants.length,
+                  agentReady: lobbyConfig.agentReady,
+                  isHost: lobbyConfig.isHost,
+                })
+                  ? void submit(liveAction("start_clue_phase"))
+                  : undefined
+              }
+              participants={participants}
+              roomCode={channelId.replace(/^room-/, "")}
+              roomId={channelId.replace(/^room-/, "")}
+              portalStatus={status}
+              capacity={lobbyConfig.capacity}
+              agentReady={lobbyConfig.agentReady}
+              isHost={lobbyConfig.isHost}
             />
           ) : null}
           {view.phase === "clue_phase" ? (
@@ -633,7 +659,9 @@ function LiveRoundRoom({
           <div className="sidebar-heading">
             <Users size={19} />
             <strong>Participantes</strong>
-            <span>{participants.length}/6</span>
+            <span>
+              {participants.length}/{lobbyConfig.capacity}
+            </span>
           </div>
           <div className="participant-list">
             {participants.map((participant) => (
@@ -671,7 +699,9 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
   const [votingStage, setVotingStage] = useState<VotingStage>("ai_detection");
   const [clue, setClue] = useState("");
   const [submittedClue, setSubmittedClue] = useState<string | null>(null);
-  const [clues, setClues] = useState(starterClues);
+  const [clues, setClues] = useState<Array<{ alias: string; text: string }>>(
+    [],
+  );
   const [discussion, setDiscussion] = useState("");
   const [selectedVote, setSelectedVote] = useState<string | null>(null);
   const [votes, setVotes] = useState<Partial<Record<VotingStage, string>>>({});
@@ -682,7 +712,7 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
     setSubmittedClue(clue.trim());
     setClues((current) => [
       ...current,
-      { alias: "Gato Ninja", text: clue.trim() },
+      { alias: "Participante", text: clue.trim() },
     ]);
     setClue("");
   };
@@ -699,10 +729,10 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
           <ChevronLeft size={18} /> Salir de la sala
         </button>
         <div className="round-brand">
-          impostoi <span>ROOM IMPOST</span>
+          impostoi <span>Partida local</span>
         </div>
         <div className="connection-status">
-          <i /> Demo reproducible · Estado local
+          <i /> Estado local no conectado
         </div>
       </header>
 
@@ -727,6 +757,7 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
               clue={clue}
               clues={clues}
               submittedClue={submittedClue}
+              category=""
               onChange={setClue}
               onSubmit={submitClue}
               onContinue={() => setPhase("discussion")}
@@ -742,6 +773,7 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
           {phase === "voting" ? (
             <Voting
               stage={votingStage}
+              participantList={[]}
               selected={selectedVote}
               submitted={voteSubmitted}
               votes={votes}
@@ -763,29 +795,10 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
           <div className="sidebar-heading">
             <Users size={19} />
             <strong>Participantes</strong>
-            <span>{participants.length}/6</span>
+            <span>0/0</span>
           </div>
           <div className="participant-list">
-            {participants.map((participant) => (
-              <div className="participant-card" key={participant.id}>
-                <span
-                  className="round-avatar"
-                  style={{ backgroundColor: participant.avatar }}
-                >
-                  {participant.alias[0]}
-                </span>
-                <div>
-                  <strong>
-                    {participant.alias}
-                    {participant.isYou ? " (tu)" : ""}
-                  </strong>
-                  <small>
-                    <i className={`activity-dot ${participant.activity}`} />{" "}
-                    {activityLabels[participant.activity]}
-                  </small>
-                </div>
-              </div>
-            ))}
+            <p>No hay una partida local.</p>
           </div>
           <div className="privacy-note">
             <Shield size={17} />
@@ -817,7 +830,7 @@ function CluePhase({
   clue,
   clues,
   submittedClue,
-  category = "Animales",
+  category,
   secretWord,
   onChange,
   onSubmit,
@@ -836,10 +849,10 @@ function CluePhase({
     <div className="phase-stack">
       <div className="word-card">
         <span>Categoria</span>
-        <strong>{category}</strong>
+        <strong>{category || "Categoria no disponible"}</strong>
         <div className="secret-word">
           <span>Palabra privada</span>
-          <b>{secretWord ?? "No disponible en la demo"}</b>
+          <b>{secretWord ?? "Palabra privada protegida"}</b>
         </div>
       </div>
       <div className="round-card clue-card">
@@ -947,7 +960,7 @@ function Discussion({
 
 function Voting({
   stage,
-  participantList = participants,
+  participantList,
   selected,
   submitted,
   votes,
@@ -956,7 +969,7 @@ function Voting({
   onContinue,
 }: {
   stage: VotingStage;
-  participantList?: readonly RoundParticipant[];
+  participantList: readonly RoundParticipant[];
   selected: string | null;
   submitted: boolean;
   votes: Partial<Record<VotingStage, string>>;

@@ -16,7 +16,6 @@ import {
   MessageCircle,
   MessagesSquare,
   Play,
-  RefreshCw,
   Sparkles,
   Star,
   Trophy,
@@ -127,9 +126,12 @@ function CreateRoomModal({
 }) {
   const [created, setCreated] = useState(false);
   const [code, setCode] = useState("");
+  const [alias, setAlias] = useState("");
+  const [avatar, setAvatar] = useState(palette[0]);
   const [capacity, setCapacity] = useState<4 | 5>(4);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const aliasId = useId();
 
   async function copyCode() {
     await navigator.clipboard?.writeText(code);
@@ -147,17 +149,17 @@ function CreateRoomModal({
     const response = await fetch("/api/rooms", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        capacity,
-        alias: "Gato Ninja",
-        avatar: "#21D4D4",
-      }),
+      body: JSON.stringify({ capacity, alias: alias.trim(), avatar }),
     });
     const payload = (await response.json()) as { code?: string };
     if (!response.ok || !payload.code) {
       setError("No se pudo crear la sala.");
       return;
     }
+    sessionStorage.setItem(
+      "impostoi_join_profile",
+      JSON.stringify({ alias: alias.trim(), avatar }),
+    );
     setCode(payload.code);
     setCreated(true);
   }
@@ -174,6 +176,34 @@ function CreateRoomModal({
           <div className="modal-note">
             <Sparkles size={18} color="var(--yellow)" />
             <span>El codigo se generara al crear la sala.</span>
+          </div>
+          <label className="modal-label" htmlFor={aliasId}>
+            Tu alias para esta partida
+          </label>
+          <input
+            id={aliasId}
+            className="room-input"
+            value={alias}
+            maxLength={24}
+            onChange={(event) => setAlias(event.target.value)}
+            placeholder="Escribe tu alias"
+          />
+          <div>
+            <span className="modal-label">Color de avatar</span>
+            <div className="color-row">
+              {palette.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  className={`color-choice ${avatar === color ? "selected" : ""}`}
+                  style={{ backgroundColor: color }}
+                  aria-label={`Elegir color ${color}`}
+                  onClick={() => setAvatar(color)}
+                >
+                  {avatar === color ? <Check size={17} /> : null}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="modal-choice-row">
             <span className="modal-label">Jugadores humanos</span>
@@ -201,6 +231,7 @@ function CreateRoomModal({
           <button
             type="button"
             className="modal-primary"
+            disabled={alias.trim().length === 0}
             onClick={() => void createRoom()}
           >
             <Play size={20} fill="currentColor" />
@@ -211,7 +242,7 @@ function CreateRoomModal({
       ) : (
         <div className="modal-success">
           <div className="success-avatar">
-            <Avatar color="#21D4D4" label="?" />
+            <Avatar color={avatar} label={alias[0]?.toUpperCase() ?? "?"} />
           </div>
           <h3>Sala lista</h3>
           <p>Comparte el codigo para que tus amigos se unan.</p>
@@ -243,8 +274,10 @@ function JoinRoomModal({
   onEnter: (roomId: string) => void;
 }) {
   const [code, setCode] = useState("");
+  const [alias, setAlias] = useState("");
   const [avatar, setAvatar] = useState(palette[0]);
   const roomCodeId = useId();
+  const aliasId = useId();
 
   return (
     <Modal
@@ -265,17 +298,17 @@ function JoinRoomModal({
           onChange={(event) => setCode(event.target.value.toUpperCase())}
         />
         <div className="alias-box">
-          <div>
-            <span className="modal-label">Tu alias para esta partida</span>
-            <strong>Gato Ninja</strong>
-          </div>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Generar otro alias"
-          >
-            <RefreshCw size={17} />
-          </button>
+          <label className="modal-label" htmlFor={aliasId}>
+            Tu alias para esta partida
+          </label>
+          <input
+            id={aliasId}
+            className="room-input"
+            value={alias}
+            maxLength={24}
+            onChange={(event) => setAlias(event.target.value)}
+            placeholder="Escribe tu alias"
+          />
         </div>
         <div>
           <span className="modal-label">Color de avatar</span>
@@ -297,11 +330,11 @@ function JoinRoomModal({
         <button
           type="button"
           className="modal-primary cyan"
-          disabled={code.length !== 6}
+          disabled={code.length !== 6 || alias.trim().length === 0}
           onClick={() => {
             sessionStorage.setItem(
               "impostoi_join_profile",
-              JSON.stringify({ alias: "Gato Ninja", avatar }),
+              JSON.stringify({ alias: alias.trim(), avatar }),
             );
             onEnter(code);
           }}
