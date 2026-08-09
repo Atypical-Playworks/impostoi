@@ -31,6 +31,7 @@ describe("server room lifecycle contract", () => {
   });
 
   test("accepts only configured capacities and confirmed profile fields", () => {
+    expect(validateRoomCapacity(3)).toBe(true);
     expect(validateRoomCapacity(4)).toBe(true);
     expect(validateRoomCapacity(6)).toBe(false);
     expect(validateAlias("Ana")).toBe(true);

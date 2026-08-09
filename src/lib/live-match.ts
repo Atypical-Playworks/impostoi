@@ -19,7 +19,7 @@ export function canStartLobby(input: {
   agentReady: boolean;
   isHost: boolean;
 }): boolean {
-  return input.participantCount >= 4 && input.agentReady && input.isHost;
+  return input.participantCount >= 3 && input.agentReady && input.isHost;
 }
 
 export function readLiveMatchView(value: unknown): PrivateGameView | null {

@@ -147,7 +147,7 @@ export async function POST(
         (item) => item.seat_status === "confirmed",
       );
       if (
-        confirmedParticipants.length < 4 ||
+        confirmedParticipants.length < 3 ||
         participant?.seat_status !== "confirmed"
       )
         return NextResponse.json(roomError("room-full"), { status: 409 });

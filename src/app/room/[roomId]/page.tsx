@@ -7,7 +7,7 @@ import { RoundRoom } from "@/app/round-room";
 
 type PublicRoom = {
   code: string;
-  capacity: 4 | 5;
+  capacity: 3 | 4 | 5;
   humanCount: number;
   confirmedCount: number;
   pendingCount: number;

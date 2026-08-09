@@ -18,7 +18,7 @@ const view = {
 describe("live match Portal events", () => {
   test("only enables lobby start when all start requirements are met", () => {
     expect(
-      canStartLobby({ participantCount: 3, agentReady: true, isHost: true }),
+      canStartLobby({ participantCount: 2, agentReady: true, isHost: true }),
     ).toBe(false);
     expect(
       canStartLobby({ participantCount: 4, agentReady: false, isHost: true }),

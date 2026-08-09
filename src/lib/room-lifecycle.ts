@@ -1,5 +1,5 @@
 export const ROOM_CODE_LENGTH = 6;
-export const ROOM_CAPACITIES = [4, 5] as const;
+export const ROOM_CAPACITIES = [3, 4, 5] as const;
 
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const roomCodePattern = /^[A-HJKMNPQRSTUVWXYZ23456789]{6}$/;
@@ -58,7 +58,7 @@ export function generateRoomCode(random = Math.random): string {
 }
 
 export function validateRoomCapacity(value: unknown): value is RoomCapacity {
-  return value === 4 || value === 5;
+  return value === 3 || value === 4 || value === 5;
 }
 
 export function validateAlias(value: unknown): value is string {

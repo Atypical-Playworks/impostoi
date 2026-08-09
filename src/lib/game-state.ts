@@ -139,7 +139,7 @@ export function createGame(input: CreateGameInput): GameState {
   }
   const players = input.participants.filter(({ kind }) => kind === "player");
   const agents = input.participants.filter(({ kind }) => kind === "agent");
-  if (players.length < 4 || players.length > 5) {
+  if (players.length < 3 || players.length > 5) {
     throw new GameStateError("invalid-player-count");
   }
   if (

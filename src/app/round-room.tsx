@@ -60,7 +60,7 @@ type LiveSetup =
   | { status: "ready"; client: Portal; tokenFetcher: () => Promise<string> };
 
 type LobbyConfig = {
-  capacity: 4 | 5;
+  capacity: 3 | 4 | 5;
   agentReady: boolean;
   isHost: boolean;
   confirmedCount: number;
@@ -262,7 +262,7 @@ function LiveLobby({
   roomCode: string | null;
   roomId: string;
   portalStatus?: string;
-  capacity?: 4 | 5;
+  capacity?: 3 | 4 | 5;
   agentReady?: boolean;
   isHost?: boolean;
   loading?: boolean;
@@ -293,8 +293,8 @@ function LiveLobby({
           ? "Solo el anfitrion puede comenzar la ronda."
           : !agentReady
             ? "La IA aun no esta lista."
-            : confirmedCount < 4
-              ? `Faltan ${4 - confirmedCount} jugadores confirmados para comenzar.`
+            : confirmedCount < 3
+              ? `Faltan ${3 - confirmedCount} jugadores confirmados para comenzar.`
               : "Comparte el codigo para que tus amigos se unan.";
   return (
     <main className="round-shell">
