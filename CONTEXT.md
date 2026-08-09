@@ -50,3 +50,20 @@ impostoi is a Spanish-first realtime social game where people try to identify an
 - The public category is visible. Civilians receive the secret word; the Impostor receives only the category.
 - The Agent always tries to hide that it is an AI, whether it is Civilian or Impostor.
 - The Agent uses the fixed `cautious-imitator` strategy and adapts within a Match, but does not learn persistently between Matches in the MVP.
+- New participants may join only while a Match is in the lobby. Once the first Round starts, late join attempts are rejected and do not create presence.
+- A lobby closes after 10 minutes empty or 30 minutes without starting; its room code is invalidated and not immediately reused.
+- A reconnecting Player with the same Guest session keeps their lobby seat and Alias instead of creating a duplicate Participant.
+- A Player confirms their Alias and avatar before joining; both remain fixed for the Match.
+- A room code has six uppercase alphanumeric characters, excludes ambiguous characters, is server-generated and reserved, and is not immediately reused after closure.
+- Server-side deadlines advance a Round when a Player does not act; missing clues, discussion completion, and votes become explicit absences or abstentions rather than blocking the Match.
+- Client actions carry unique action IDs; the server processes each ID once, making retries safe and rejecting actions outside the current phase.
+- A Player reconnecting after the 60-second grace period cannot reclaim a Match seat or role; they may only see the public final result when available.
+- Room-code reservation is atomic and unique; collisions retry server-side and never overwrite an existing room.
+- Room-entry attempts are rate-limited to five per IP and session per minute, with progressive backoff and temporary blocking after repeated failures.
+- Room failures expose safe client messages and structured server error codes; logs never include tokens, secrets, words, roles, or votes.
+- The Host may cancel a Match during the lobby; cancellation invalidates the room code and creates no replay or statistics. After the Match starts, Host departure uses transfer instead.
+- The lobby provides copy actions for the room code and `/room/{CODE}` invite link; neither contains tokens or persistent identity data.
+- The Host selects 4 or 5 human Players and confirms their Alias and avatar before server-side room reservation; these settings remain fixed for the Match.
+- A room at its configured human capacity rejects additional join attempts as full without creating a session or presence.
+- The Host may remove a Participant during the lobby; the server releases their seat and blocks that Guest session from rejoining the room. Removal is unavailable after the Match starts.
+- The lobby shows the current human count, configured capacity, and Agent readiness; starting is disabled below four human Players and available only to the Host.
