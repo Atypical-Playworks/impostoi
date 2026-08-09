@@ -73,6 +73,13 @@ type LobbyConfig = {
     avatar: string;
     isHost: boolean;
   }[];
+  serverParticipants: {
+    id: string;
+    alias: string;
+    avatar: string;
+    status: "pending" | "confirmed";
+    isHost: boolean;
+  }[];
 };
 
 type PublicRuntimeConfig = {
@@ -91,6 +98,7 @@ export function RoundRoom({
     confirmedCount: 0,
     pendingCount: 0,
     pendingParticipants: [],
+    serverParticipants: [],
   },
 }: {
   onLeave: () => void;
@@ -478,6 +486,10 @@ function LiveRoundRoom({
       metadata: profile ? { ...profile, activity: "idle", isHost } : {},
     });
 
+  useEffect(() => {
+    setIsHost(lobbyConfig.isHost);
+  }, [lobbyConfig.isHost]);
+
   let view: PrivateGameView | null = readLiveMatchView(ext?.match);
   for (const message of messages) {
     const next = readLiveMatchView(message.content);
@@ -530,22 +542,24 @@ function LiveRoundRoom({
   }, [channelId]);
 
   useEffect(() => {
-    if (status !== "ready" || !me || admissionConfirmed) return;
+    if (status !== "ready" || !me) return;
     let active = true;
     const confirm = () => {
       void fetch(`/api/rooms/${channelId.replace(/^room-/, "")}/confirm`, {
         method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(profile ?? {}),
       }).then((response) => {
         if (active && response.ok) setAdmissionConfirmed(true);
       });
     };
     confirm();
-    const interval = window.setInterval(confirm, 2_000);
+    const interval = window.setInterval(confirm, 10_000);
     return () => {
       active = false;
       window.clearInterval(interval);
     };
-  }, [admissionConfirmed, channelId, me, status]);
+  }, [channelId, me, profile, status]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -593,9 +607,33 @@ function LiveRoundRoom({
   };
 
   if (!view) {
+    const portalParticipants =
+      presence?.kind === "detailed" ? presence.participants : [];
+    const portalById = new Map(
+      portalParticipants.map((participant) => [participant.id, participant]),
+    );
     const connectedParticipants: RoundParticipant[] =
-      presence?.kind === "detailed"
-        ? presence.participants.map((participant) => {
+      lobbyConfig.serverParticipants.length > 0
+        ? lobbyConfig.serverParticipants.map((participant) => {
+            const portalParticipant = portalById.get(participant.id);
+            const metadata = portalParticipant?.metadata ?? {};
+            const activity =
+              metadata.activity === "clue" ||
+              metadata.activity === "discussion" ||
+              metadata.activity === "voting"
+                ? metadata.activity
+                : "idle";
+            return {
+              id: participant.id,
+              alias: participant.alias,
+              avatar: participant.avatar,
+              activity,
+              isYou: participant.id === me?.id,
+              isHost: participant.isHost,
+              isPending: participant.status === "pending",
+            };
+          })
+        : portalParticipants.map((participant) => {
             const metadata = participant.metadata ?? {};
             const alias =
               typeof metadata.alias === "string"
@@ -620,20 +658,7 @@ function LiveRoundRoom({
               isHost,
               isPending,
             };
-          })
-        : localParticipant
-          ? [localParticipant]
-          : [];
-    const connectedIds = new Set(connectedParticipants.map(({ id }) => id));
-    for (const participant of lobbyConfig.pendingParticipants) {
-      if (!connectedIds.has(participant.id)) {
-        connectedParticipants.push({
-          ...participant,
-          activity: "idle",
-          isPending: true,
-        });
-      }
-    }
+          });
     const currentHost = connectedParticipants.find(
       (participant) => participant.isHost,
     );

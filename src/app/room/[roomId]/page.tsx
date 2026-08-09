@@ -242,6 +242,14 @@ export default function RoomPage() {
               avatar: participant.avatar,
               isHost: participant.isHost,
             })) ?? [],
+        serverParticipants:
+          room?.participants.map((participant) => ({
+            id: participant.id,
+            alias: participant.alias,
+            avatar: participant.avatar,
+            status: participant.status,
+            isHost: participant.isHost,
+          })) ?? [],
       }}
       onLeave={() => router.push("/")}
     />
