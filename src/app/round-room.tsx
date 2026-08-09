@@ -227,7 +227,7 @@ function LiveLobby({
   loading?: boolean;
   timedOut?: boolean;
 }) {
-  const isPending = loading || timedOut;
+  const isPending = loading;
   const canStart = canStartLobby({
     participantCount: participants.length,
     agentReady,
@@ -439,6 +439,15 @@ function LiveRoundRoom({
   }, [me, setMetadata, view?.phase]);
 
   if (!view) {
+    const localParticipant: RoundParticipant | null = me
+      ? {
+          id: me.id,
+          alias: "Gato Ninja",
+          avatar: "#21D4D4",
+          activity: "idle",
+          isYou: true,
+        }
+      : null;
     const connectedParticipants: RoundParticipant[] =
       presence?.kind === "detailed"
         ? presence.participants.map((participant) => {
@@ -481,7 +490,7 @@ function LiveRoundRoom({
           onLeave={onLeave}
           onRetry={onRetry}
           onStart={() => undefined}
-          participants={[]}
+          participants={localParticipant ? [localParticipant] : []}
           roomCode={channelId.replace(/^room-/, "")}
           timedOut
           {...lobbyConfig}
