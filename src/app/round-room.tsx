@@ -573,7 +573,7 @@ function LiveRoundRoom({
     profile,
     setMetadata,
     view?.phase,
-    view.activeTurnId,
+    view?.activeTurnId,
   ]);
 
   const submitAction = async (
@@ -928,6 +928,7 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
                   id: "demo-1",
                   alias: "Participante",
                   avatar: "#21D4D4",
+                  activity: "idle",
                   isYou: true,
                 },
               ]}
