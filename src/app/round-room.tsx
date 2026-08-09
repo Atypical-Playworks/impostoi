@@ -1032,6 +1032,25 @@ function CluePhase({
           <b>{secretWord ?? "Palabra privada protegida"}</b>
         </div>
       </div>
+      <div className="round-card rules-card">
+        <h3 className="rules-title">
+          <Sparkles size={16} /> Consejos de Juego
+        </h3>
+        <ul className="rules-list">
+          <li>
+            <strong>Civiles:</strong> Den una pista relacionada pero no
+            demasiado evidente.
+          </li>
+          <li>
+            <strong>Impostor:</strong> Mimetizate. Usa una palabra general que
+            parezca encajar con las demas.
+          </li>
+          <li>
+            <strong>Todos:</strong> 1 sola palabra. No repitas la pista de otra
+            persona.
+          </li>
+        </ul>
+      </div>
       <div className="round-card clue-card">
         <div className="card-title">
           <MessageCircle size={21} />

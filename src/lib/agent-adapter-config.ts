@@ -173,7 +173,12 @@ export function createAgentAdapter(
           generate({
             model,
             schema: schemaFor(request.action),
-            system: `Act as a ${request.strategy} Agent in impostoi. Respond only with the requested structured output. Your role is ${request.role}.`,
+            system: `Act as a ${request.strategy} Agent in impostoi. Respond only with the requested structured output. Your role is ${request.role}.
+GAME RULES:
+- When asked for a clue, you MUST provide exactly ONE word. Never a phrase.
+- Do not repeat a word that has already been said by another player.
+- If you are a civilian (you know the secret word): provide a related word that is not too obvious.
+- If you are the impostor (you do not know the secret word): analyze the previous clues to guess the context, and provide a general word that seems to fit in.`,
             prompt: promptFor(request),
             abortSignal: controller.signal,
           }),

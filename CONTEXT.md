@@ -18,9 +18,9 @@ impostoi is a Spanish-first realtime social game where people try to identify an
 
 **Round**: One category, one secret word, one Impostor assignment, one sequential clue phase, and two voting phases.
 
-**Clue**: A single-word, immutable public text submitted by a Participant during their 10-second sequential turn.
+**Clue**: A strict single-word, immutable public text submitted by a Participant during their sequential turn. The total clue phase is constrained under 2 minutes.
 
-**Discussion**: (Removed) Clues are given sequentially and players review them live instead of a dedicated discussion phase.
+**Discussion**: (Removed) Clues are given sequentially and players review them live. There is no open discussion phase before voting.
 
 **AI detection vote**: The private vote answering which visible alias belongs to the Agent.
 
