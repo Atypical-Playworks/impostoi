@@ -79,7 +79,9 @@ describe("server-authoritative game state", () => {
     const state = readyGame();
     expect(state.activeTurnId).toBe("p1");
     expect(() => submitClue(state, "p2", "x")).toThrow("not-your-turn");
-    expect(() => submitClue(state, "p1", "dos palabras")).toThrow("invalid-clue");
+    expect(() => submitClue(state, "p1", "dos palabras")).toThrow(
+      "invalid-clue",
+    );
 
     const withClue = submitClue(state, "p1", "bosque");
     expect(viewFor(withClue, "p1").clues).toEqual([
@@ -133,7 +135,7 @@ describe("server-authoritative game state", () => {
     }
     expect(state.phase).toBe("clue_phase");
     expect(state.activeTurnId).toBe("agent"); // Last participant
-    
+
     // Timeout last player goes to voting
     state = advanceTimedOutPhase(state, state.phaseDeadlineAt as number);
     expect(state.phase).toBe("voting");

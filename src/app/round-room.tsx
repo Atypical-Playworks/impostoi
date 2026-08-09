@@ -869,7 +869,7 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
   const [clues, setClues] = useState<Array<{ alias: string; text: string }>>(
     [],
   );
-  const [discussion, setDiscussion] = useState("");
+  const [_discussion, _setDiscussion] = useState("");
   const [selectedVote, setSelectedVote] = useState<string | null>(null);
   const [votes, setVotes] = useState<Partial<Record<VotingStage, string>>>({});
 
@@ -911,8 +911,7 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
               <h1>{phaseTitle(phase)}</h1>
             </div>
             <div className="round-timer">
-              <Clock3 size={19} />{" "}
-              {formatTimer(20)}
+              <Clock3 size={19} /> {formatTimer(20)}
             </div>
           </div>
 
@@ -924,7 +923,14 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
               clue={clue}
               clues={clues}
               activeTurnId={"demo-1"}
-              participants={[{ id: "demo-1", alias: "Participante", avatar: "#21D4D4", isYou: true }]}
+              participants={[
+                {
+                  id: "demo-1",
+                  alias: "Participante",
+                  avatar: "#21D4D4",
+                  isYou: true,
+                },
+              ]}
               myId={"demo-1"}
               submittedClue={submittedClue}
               category="Animales"
