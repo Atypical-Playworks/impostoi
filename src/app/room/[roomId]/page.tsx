@@ -24,14 +24,19 @@ export default function RoomPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!roomId) return;
     let active = true;
+    setError(null);
     void fetch(`/api/rooms/${roomId}`)
       .then(async (response) => {
         const payload = (await response.json()) as
           | PublicRoom
           | { error?: string };
         if (!response.ok || !("code" in payload)) throw new Error("room");
-        if (active) setRoom(payload);
+        if (active) {
+          setRoom(payload);
+          setError(null);
+        }
       })
       .catch(() => active && setError("Esta sala no esta disponible."));
     return () => {
