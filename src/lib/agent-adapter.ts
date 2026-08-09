@@ -11,6 +11,6 @@ export {
   agentReplayEvent,
   CAUTIOUS_IMITATOR,
   createAgentAdapter,
-  type GenerateStructuredObject,
+  type GenerateText,
   type PublicClue,
 } from "./agent-adapter-config";

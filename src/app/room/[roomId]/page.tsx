@@ -141,12 +141,28 @@ export default function RoomPage() {
                 body: JSON.stringify(selectedProfile),
               })
             : null;
-        if (!guest.ok || (room?.status === "lobby" && !response?.ok)) {
-          throw new Error("join");
+        if (!guest.ok) throw new Error("session-expired");
+        if (room?.status === "lobby" && !response?.ok) {
+          const payload = (await (response
+            ? response.json().catch(() => null)
+            : null)) as {
+            error?: string;
+          } | null;
+          throw new Error(payload?.error ?? "room-unavailable");
         }
         setConfirmed(true);
-      } catch {
+      } catch (error) {
         setJoining(false);
+        const errorCode = error instanceof Error ? error.message : "";
+        if (
+          errorCode === "room-expired" ||
+          errorCode === "room-unavailable" ||
+          errorCode === "room-cancelled" ||
+          errorCode === "room-started"
+        ) {
+          setError("Esta sala ya no esta disponible. Crea o usa otra sala.");
+          return;
+        }
         setError(
           "La conexion tardo demasiado. Revisa tu red y vuelve a intentar.",
         );

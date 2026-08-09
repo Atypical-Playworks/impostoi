@@ -2,10 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 
 mock.module("server-only", () => ({}));
 
-import type {
-  AgentRequest,
-  GenerateStructuredObject,
-} from "@/lib/agent-adapter-config";
+import type { AgentRequest, GenerateText } from "@/lib/agent-adapter-config";
 
 const { agentReplayEvent, createAgentAdapter } = await import(
   "@/lib/agent-adapter-config"
@@ -30,10 +27,10 @@ describe("OpenCode Zen Agent adapter", () => {
   test("returns structured output and keeps role context in the provider prompt", async () => {
     let providerPrompt = "";
     let systemPrompt = "";
-    const generate: GenerateStructuredObject = async ({ prompt, system }) => {
+    const generate: GenerateText = async ({ prompt, system }) => {
       providerPrompt = prompt;
       systemPrompt = system;
-      return { object: { text: "Tiene hábitos nocturnos" } };
+      return { text: "nocturna" };
     };
 
     const result = await createAgentAdapter(
@@ -46,7 +43,7 @@ describe("OpenCode Zen Agent adapter", () => {
 
     expect(result).toEqual({
       action: "clue",
-      output: { text: "Tiene hábitos nocturnos" },
+      output: { text: "nocturna" },
       metadata: { fallback: false, responseTimeMs: expect.any(Number) },
     });
     expect(providerPrompt).toContain('"role":"civilian"');
@@ -56,9 +53,9 @@ describe("OpenCode Zen Agent adapter", () => {
 
   test("uses the model supplied by the request", async () => {
     let modelId = "";
-    const generate: GenerateStructuredObject = async ({ model }) => {
+    const generate: GenerateText = async ({ model }) => {
       modelId = (model as { modelId: string }).modelId;
-      return { object: { text: "Una pista" } };
+      return { text: "Una pista" };
     };
 
     await createAgentAdapter(
@@ -78,7 +75,7 @@ describe("OpenCode Zen Agent adapter", () => {
 
   test("uses a deterministic fallback when the provider times out", async () => {
     let wasAborted = false;
-    const neverCompletes: GenerateStructuredObject = ({ abortSignal }) => {
+    const neverCompletes: GenerateText = ({ abortSignal }) => {
       abortSignal?.addEventListener("abort", () => {
         wasAborted = true;
       });
@@ -105,9 +102,9 @@ describe("OpenCode Zen Agent adapter", () => {
 
   test("does not disclose the secret word to an Impostor", async () => {
     let providerPrompt = "";
-    const generate: GenerateStructuredObject = async ({ prompt }) => {
+    const generate: GenerateText = async ({ prompt }) => {
       providerPrompt = prompt;
-      return { object: { text: "Una pista pública" } };
+      return { text: "Una pista pública" };
     };
 
     await createAgentAdapter(
@@ -123,9 +120,7 @@ describe("OpenCode Zen Agent adapter", () => {
   });
 
   test("uses the fallback when the provider returns an invalid shape", async () => {
-    const invalidOutput: GenerateStructuredObject = async () => ({
-      object: { text: "" },
-    });
+    const invalidOutput: GenerateText = async () => ({ text: "" });
 
     const result = await createAgentAdapter(
       { apiKey: "secret-key", baseUrl: "https://opencode.example/v1" },
@@ -145,7 +140,7 @@ describe("OpenCode Zen Agent adapter", () => {
 
   test("supports every structured agent action", async () => {
     const outputs = {
-      clue: { text: "Una pista" },
+      clue: { text: "pista" },
       discussion: { text: "Una respuesta" },
       vote: { alias: "Luna" },
       summary: { summary: "Resumen del encuentro" },
@@ -154,7 +149,16 @@ describe("OpenCode Zen Agent adapter", () => {
     for (const action of Object.keys(outputs) as AgentRequest["action"][]) {
       const result = await createAgentAdapter(
         { apiKey: "secret-key", baseUrl: "https://opencode.example/v1" },
-        async () => ({ object: outputs[action] }),
+        async () => ({
+          text:
+            action === "clue"
+              ? outputs.clue.text
+              : action === "discussion"
+                ? outputs.discussion.text
+                : action === "vote"
+                  ? outputs.vote.alias
+                  : outputs.summary.summary,
+        }),
       ).act({ ...request, action });
 
       expect(result.output).toEqual(outputs[action]);

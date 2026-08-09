@@ -9,6 +9,7 @@ export type ServerRuntimeConfig = {
   agentApiKey: string;
   agentBaseUrl: string;
   agentModel: string;
+  agentTimeoutMs: number;
   opencodeZenApiKey: string;
   opencodeZenBaseUrl: string;
   opencodeModel: string;
@@ -25,13 +26,22 @@ function required(env: RuntimeEnv, name: string): string {
 export function readServerRuntimeConfig(
   env: RuntimeEnv = process.env,
 ): ServerRuntimeConfig {
-  const agentApiKey = env.OPENAI_API_KEY ?? env.OPENCODE_ZEN_API_KEY;
+  const provider =
+    env.AGENT_PROVIDER ?? (env.OPENAI_API_KEY ? "openai" : "zen");
+  const usesOpenAi = provider === "openai";
+  const agentApiKey = usesOpenAi
+    ? env.OPENAI_API_KEY
+    : env.OPENCODE_ZEN_API_KEY;
   if (!agentApiKey) {
     throw new Error(
       "Missing required server environment variable: OPENAI_API_KEY or OPENCODE_ZEN_API_KEY",
     );
   }
-  const usesOpenAi = Boolean(env.OPENAI_API_KEY);
+  const configuredTimeout = Number(env.AGENT_TIMEOUT_MS ?? "4000");
+  const agentTimeoutMs =
+    Number.isFinite(configuredTimeout) && configuredTimeout > 0
+      ? configuredTimeout
+      : 4000;
   return {
     supabaseSecretKey: required(env, "SUPABASE_SECRET_KEY"),
     portalSecret: required(env, "PORTAL_SECRET"),
@@ -43,6 +53,7 @@ export function readServerRuntimeConfig(
     agentModel: usesOpenAi
       ? (env.OPENAI_MODEL ?? "gpt-4o-mini")
       : (env.OPENCODE_MODEL ?? "mimo-v2.5-free"),
+    agentTimeoutMs,
     opencodeZenApiKey: env.OPENCODE_ZEN_API_KEY ?? agentApiKey,
     opencodeZenBaseUrl:
       env.OPENCODE_ZEN_BASE_URL ?? "https://opencode.ai/zen/v1",

@@ -33,6 +33,10 @@ type PrivateRound = {
     readonly ai_detection: ReadonlyMap<string, string>;
     readonly impostor: ReadonlyMap<string, string>;
   };
+  readonly abstentions: {
+    readonly ai_detection: readonly string[];
+    readonly impostor: readonly string[];
+  };
 };
 
 export type GameState = {
@@ -44,6 +48,7 @@ export type GameState = {
   readonly votingStage?: VotingStage;
   readonly activeTurnId?: string;
   readonly participants: readonly Participant[];
+  readonly turnOrder: readonly string[];
   readonly round: PrivateRound;
 };
 
@@ -59,6 +64,7 @@ export type PublicGameView = {
   clues: readonly { alias: string; text: string }[];
   voteTally?: Readonly<Record<string, number>>;
   impostorVoteTally?: Readonly<Record<string, number>>;
+  abstentions?: Readonly<Record<VotingStage, readonly string[]>>;
   agentId?: string;
   impostorId?: string;
 };
@@ -115,6 +121,26 @@ function deadlineAfter(now: number, durationMs: number): number {
   return now + durationMs;
 }
 
+function shuffleIds(
+  participants: readonly Participant[],
+  random: () => number,
+): string[] {
+  const ids = participants.map(({ id }) => id);
+  for (let index = ids.length - 1; index > 0; index -= 1) {
+    const value = random();
+    if (!Number.isFinite(value) || value < 0 || value >= 1) {
+      throw new GameStateError("invalid-random");
+    }
+    const swapIndex = Math.floor(value * (index + 1));
+    [ids[index], ids[swapIndex]] = [ids[swapIndex], ids[index]];
+  }
+  return ids;
+}
+
+function turnOrderFor(state: GameState): readonly string[] {
+  return state.turnOrder ?? state.participants.map(({ id }) => id);
+}
+
 function tally(
   votes: ReadonlyMap<string, string>,
 ): Readonly<Record<string, number>> {
@@ -131,6 +157,20 @@ function allSubmitted(
   votes: ReadonlyMap<string, string>,
 ): boolean {
   return votes.size === state.participants.length;
+}
+
+function recordAbstentions(state: GameState): GameState {
+  const stage = state.votingStage ?? "ai_detection";
+  const votes = state.round.votes[stage];
+  const abstentions = state.participants
+    .filter(({ id }) => !votes.has(id))
+    .map(({ id }) => id);
+  return copyState(state, {
+    round: {
+      ...state.round,
+      abstentions: { ...state.round.abstentions, [stage]: abstentions },
+    },
+  });
 }
 
 export function createGame(input: CreateGameInput): GameState {
@@ -190,6 +230,7 @@ export function createGame(input: CreateGameInput): GameState {
     roundNumber: 1,
     phase: "lobby",
     participants: input.participants,
+    turnOrder: shuffleIds(input.participants, random),
     round: {
       category: input.category,
       secretWord: input.secretWord,
@@ -197,6 +238,7 @@ export function createGame(input: CreateGameInput): GameState {
       impostorId: impostor.id,
       clues: new Map(),
       votes: { ai_detection: new Map(), impostor: new Map() },
+      abstentions: { ai_detection: [], impostor: [] },
     },
   };
 }
@@ -210,7 +252,7 @@ export function startCluePhase(
   requirePhase(state, "lobby");
   return copyState(state, {
     phase: "clue_phase",
-    activeTurnId: state.participants[0]?.id,
+    activeTurnId: turnOrderFor(state)[0],
     phaseDeadlineAt: deadlineAfter(now, CLUE_PHASE_TIMEOUT_MS),
   });
 }
@@ -223,10 +265,9 @@ function advanceTurn(state: GameState, now: number): GameState {
   const withTimeoutClue = copyState(state, {
     round: { ...state.round, clues },
   });
-  const currentIndex = state.participants.findIndex(
-    (p) => p.id === state.activeTurnId,
-  );
-  if (currentIndex === -1 || currentIndex === state.participants.length - 1) {
+  const turnOrder = turnOrderFor(state);
+  const currentIndex = turnOrder.indexOf(state.activeTurnId ?? "");
+  if (currentIndex === -1 || currentIndex === turnOrder.length - 1) {
     return copyState(withTimeoutClue, {
       phase: "voting",
       votingStage: "ai_detection",
@@ -235,7 +276,7 @@ function advanceTurn(state: GameState, now: number): GameState {
     });
   }
   return copyState(withTimeoutClue, {
-    activeTurnId: state.participants[currentIndex + 1].id,
+    activeTurnId: turnOrder[currentIndex + 1],
     phaseDeadlineAt: deadlineAfter(now, CLUE_PHASE_TIMEOUT_MS),
   });
 }
@@ -314,6 +355,7 @@ export function advanceTimedOutPhase(
     case "clue_phase":
       return advanceTurn(state, now);
     case "voting":
+      state = recordAbstentions(state);
       if (state.votingStage === "ai_detection") {
         return copyState(state, {
           votingStage: "impostor",
@@ -360,11 +402,13 @@ export function startNextRound(
   const impostor =
     state.participants[Math.floor(randomValue * state.participants.length)];
   if (!impostor) throw new GameStateError("invalid-random");
+  const turnOrder = shuffleIds(state.participants, random);
 
   return copyState(state, {
     roundNumber: state.roundNumber + 1,
     phase: "clue_phase",
-    activeTurnId: state.participants[0]?.id,
+    activeTurnId: turnOrder[0],
+    turnOrder,
     phaseDeadlineAt: deadlineAfter(now, CLUE_PHASE_TIMEOUT_MS),
     round: {
       category,
@@ -373,6 +417,7 @@ export function startNextRound(
       impostorId: impostor.id,
       clues: new Map(),
       votes: { ai_detection: new Map(), impostor: new Map() },
+      abstentions: { ai_detection: [], impostor: [] },
     },
   });
 }
@@ -438,6 +483,7 @@ export function publicViewFor(state: GameState): PublicGameView {
       ? {
           voteTally: tally(state.round.votes.ai_detection),
           impostorVoteTally: tally(state.round.votes.impostor),
+          abstentions: state.round.abstentions,
           agentId: state.round.agentId,
           impostorId: state.round.impostorId,
         }

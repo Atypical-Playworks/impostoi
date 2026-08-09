@@ -426,7 +426,13 @@ export default function HomePage() {
                 <button type="button" className="selected">
                   Espanol <Check size={15} />
                 </button>
-                <button type="button">English</button>
+                <button
+                  type="button"
+                  disabled
+                  title="English disponible proximamente"
+                >
+                  English
+                </button>
               </div>
             ) : null}
           </div>
@@ -453,6 +459,8 @@ export default function HomePage() {
                 type="button"
                 role="tab"
                 aria-selected={authMode === "authenticated"}
+                disabled
+                title="Autenticacion disponible proximamente"
                 className={
                   authMode === "authenticated" ? "active authenticated" : ""
                 }

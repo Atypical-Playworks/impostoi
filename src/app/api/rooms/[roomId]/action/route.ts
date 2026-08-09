@@ -49,6 +49,8 @@ type RoomParticipantRow = {
   seat_status: "pending" | "confirmed";
 };
 
+type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
+
 const DEFAULT_CATEGORIES = [
   { category: "Animales", word: "zorro" },
   { category: "Colores", word: "turquesa" },
@@ -61,6 +63,44 @@ function randomCategory() {
   return DEFAULT_CATEGORIES[
     Math.floor(Math.random() * DEFAULT_CATEGORIES.length)
   ];
+}
+
+async function claimAgentTurn(
+  admin: AdminClient,
+  code: string,
+  matchId: string,
+  turnKey: string,
+): Promise<boolean> {
+  const claim = async () => {
+    const result = await admin.rpc("claim_agent_turn", {
+      requested_code: code,
+      requested_match_id: matchId,
+      requested_turn_key: turnKey,
+    });
+    if (result.error) throw result.error;
+    return result.data === true;
+  };
+
+  if (await claim()) return true;
+
+  const staleBefore = new Date(Date.now() - 45_000).toISOString();
+  const { data: staleClaim } = await admin
+    .from("live_agent_turn_claims")
+    .select("claimed_at")
+    .eq("room_code", code)
+    .eq("match_id", matchId)
+    .eq("turn_key", turnKey)
+    .lt("claimed_at", staleBefore)
+    .maybeSingle();
+  if (!staleClaim) return false;
+
+  await admin
+    .from("live_agent_turn_claims")
+    .delete()
+    .eq("room_code", code)
+    .eq("match_id", matchId)
+    .eq("turn_key", turnKey);
+  return claim();
 }
 
 export async function POST(
@@ -213,14 +253,16 @@ export async function POST(
     if (!state)
       return NextResponse.json(roomError("room-unavailable"), { status: 409 });
 
-    const agentTurnExpired = Boolean(
+    const agentNeedsAction = Boolean(
       state?.phase === "clue_phase" &&
         state.activeTurnId === "agent" &&
-        activeTurnBeforeAction === "agent" &&
-        state.phaseDeadlineAt !== undefined &&
-        Date.now() >= state.phaseDeadlineAt,
+        (activeTurnBeforeAction !== "agent" ||
+          (state.phaseDeadlineAt !== undefined &&
+            Date.now() >= state.phaseDeadlineAt)),
     );
-    if (!agentTurnExpired) state = advanceTimedOutPhase(state);
+    const stateBeforeTimeout = state;
+    if (!agentNeedsAction) state = advanceTimedOutPhase(state);
+    const stateAdvancedByTimeout = state !== stateBeforeTimeout;
     if (!state) {
       return NextResponse.json(roomError("room-unavailable"), { status: 409 });
     }
@@ -229,28 +271,25 @@ export async function POST(
     if (
       nonNullState.phase === "clue_phase" &&
       nonNullState.activeTurnId === "agent" &&
-      agentTurnExpired
+      agentNeedsAction
     ) {
-      const { data: claimed, error: claimError } = await admin.rpc(
-        "claim_agent_turn",
-        {
-          requested_code: code,
-          requested_match_id: nonNullState.matchId,
-          requested_turn_key: `clue:${nonNullState.roundNumber}`,
-        },
+      const claimed = await claimAgentTurn(
+        admin,
+        code,
+        nonNullState.matchId,
+        `clue:${nonNullState.roundNumber}`,
       );
-      if (claimError)
-        return NextResponse.json(roomError("room-unavailable"), {
-          status: 503,
+      if (!claimed) {
+        return NextResponse.json({
+          ok: true,
+          view: viewFor(nonNullState, user.id),
         });
-      if (claimed !== true) {
-        state = nonNullState;
       } else {
         const config = readServerRuntimeConfig();
         const adapter = createAgentAdapter({
           apiKey: config.agentApiKey,
           baseUrl: config.agentBaseUrl,
-          timeoutMs: 4000,
+          timeoutMs: config.agentTimeoutMs,
         });
 
         const publicClues = [...nonNullState.round.clues.entries()].map(
@@ -295,26 +334,24 @@ export async function POST(
       const currentVotes =
         nonNullState.round.votes[nonNullState.votingStage ?? "ai_detection"];
       if (!currentVotes.has("agent")) {
-        const { data: claimed, error: claimError } = await admin.rpc(
-          "claim_agent_turn",
-          {
-            requested_code: code,
-            requested_match_id: nonNullState.matchId,
-            requested_turn_key: `vote:${nonNullState.roundNumber}:${nonNullState.votingStage ?? "ai_detection"}`,
-          },
+        const claimed = await claimAgentTurn(
+          admin,
+          code,
+          nonNullState.matchId,
+          `vote:${nonNullState.roundNumber}:${nonNullState.votingStage ?? "ai_detection"}`,
         );
-        if (claimError)
-          return NextResponse.json(roomError("room-unavailable"), {
-            status: 503,
+        if (!claimed && !stateAdvancedByTimeout) {
+          return NextResponse.json({
+            ok: true,
+            view: viewFor(nonNullState, user.id),
           });
-        if (claimed !== true) {
-          state = nonNullState;
-        } else {
+        }
+        if (claimed) {
           const config = readServerRuntimeConfig();
           const adapter = createAgentAdapter({
             apiKey: config.agentApiKey,
             baseUrl: config.agentBaseUrl,
-            timeoutMs: 4000,
+            timeoutMs: config.agentTimeoutMs,
           });
 
           const publicClues = [...nonNullState.round.clues.entries()].map(

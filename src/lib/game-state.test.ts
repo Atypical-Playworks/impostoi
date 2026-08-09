@@ -20,6 +20,8 @@ const participants = [
 ];
 
 function readyGame() {
+  const randomValues = [0.2, 0.99, 0.99, 0.99, 0.99];
+  let randomIndex = 0;
   return startCluePhase(
     createGame({
       matchId: "match-1",
@@ -28,7 +30,7 @@ function readyGame() {
       category: "Animales",
       secretWord: "zorro",
       agentId: "agent",
-      random: () => 0.2,
+      random: () => randomValues[randomIndex++] ?? 0.99,
     }),
     "p1",
   );

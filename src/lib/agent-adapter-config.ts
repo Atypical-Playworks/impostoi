@@ -1,8 +1,7 @@
 import "server-only";
 
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { generateObject } from "ai";
-import { z } from "zod";
+import { generateText } from "ai";
 
 export const CAUTIOUS_IMITATOR = "cautious-imitator" as const;
 
@@ -52,17 +51,16 @@ export type AgentReplayEvent = {
   readonly duration_ms: number;
 };
 
-type StructuredObjectArgs = {
-  model: Parameters<typeof generateObject>[0]["model"];
-  schema: z.ZodType;
+type TextGenerationArgs = {
+  model: Parameters<typeof generateText>[0]["model"];
   system: string;
   prompt: string;
   abortSignal?: AbortSignal;
 };
 
-export type GenerateStructuredObject = (
-  args: StructuredObjectArgs,
-) => Promise<{ object: unknown }>;
+export type GenerateText = (
+  args: TextGenerationArgs,
+) => Promise<{ text: string }>;
 
 export type AgentAdapterConfig = {
   apiKey: string;
@@ -70,34 +68,22 @@ export type AgentAdapterConfig = {
   timeoutMs?: number;
 };
 
-const clueSchema = z.object({ text: z.string().min(1) });
-const discussionSchema = z.object({ text: z.string().min(1) });
-const voteSchema = z.object({ alias: z.string().min(1) });
-const summarySchema = z.object({ summary: z.string().min(1) });
-
-function schemaFor(action: AgentAction): z.ZodType {
+function parseTextOutput(action: AgentAction, text: string): AgentOutput {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("empty-agent-response");
   switch (action) {
     case "clue":
-      return clueSchema;
+      return {
+        text: trimmed
+          .split(/\s+/)[0]
+          .replace(/^[^\p{L}\p{N}-]+|[^\p{L}\p{N}-]+$/gu, ""),
+      };
     case "discussion":
-      return discussionSchema;
+      return { text: trimmed };
     case "vote":
-      return voteSchema;
+      return { alias: trimmed };
     case "summary":
-      return summarySchema;
-  }
-}
-
-function parseOutput(action: AgentAction, object: unknown): AgentOutput {
-  switch (action) {
-    case "clue":
-      return clueSchema.parse(object);
-    case "discussion":
-      return discussionSchema.parse(object);
-    case "vote":
-      return voteSchema.parse(object);
-    case "summary":
-      return summarySchema.parse(object);
+      return { summary: trimmed };
   }
 }
 
@@ -145,15 +131,14 @@ export function agentReplayEvent(result: AgentResult): AgentReplayEvent {
 
 export function createAgentAdapter(
   config: AgentAdapterConfig,
-  generate: GenerateStructuredObject = async (args) => {
-    const result = await generateObject({
+  generate: GenerateText = async (args) => {
+    const result = await generateText({
       model: args.model,
-      schema: args.schema,
       system: args.system,
       prompt: args.prompt,
       abortSignal: args.abortSignal,
     });
-    return { object: result.object };
+    return { text: result.text };
   },
 ) {
   const provider = createOpenAICompatible({
@@ -172,18 +157,18 @@ export function createAgentAdapter(
         .then(() =>
           generate({
             model,
-            schema: schemaFor(request.action),
-            system: `Act as a ${request.strategy} Agent in impostoi. Respond only with the requested structured output. Your role is ${request.role}.
+            system: `Act as a ${request.strategy} Agent in impostoi. Respond with plain text only. Your role is ${request.role}.
 GAME RULES:
 - When asked for a clue, you MUST provide exactly ONE word. Never a phrase.
 - Do not repeat a word that has already been said by another player.
 - If you are a civilian (you know the secret word): provide a related word that is not too obvious.
-- If you are the impostor (you do not know the secret word): analyze the previous clues to guess the context, and provide a general word that seems to fit in.`,
+- If you are the impostor (you do not know the secret word): analyze the previous clues to guess the context, and provide a general word that seems to fit in.
+- Do not add JSON, punctuation, explanation, or formatting around your answer.`,
             prompt: promptFor(request),
             abortSignal: controller.signal,
           }),
         )
-        .then(({ object }) => parseOutput(request.action, object));
+        .then(({ text }) => parseTextOutput(request.action, text));
       let timer: ReturnType<typeof setTimeout> | undefined;
 
       try {

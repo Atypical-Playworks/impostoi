@@ -59,6 +59,36 @@ function displayAlias(alias: string, isYou: boolean): string {
   return isYou ? `${cleanAlias} (tu)` : cleanAlias;
 }
 
+function viewProgress(view: PrivateGameView): number {
+  const phaseProgress: Record<MatchPhase, number> = {
+    lobby: 0,
+    clue_phase: 1,
+    voting: 2,
+    reveal: 3,
+    results: 4,
+    match_over: 5,
+  };
+  const stageProgress = view.votingStage === "impostor" ? 1 : 0;
+  const voteCount = Object.keys(view.ownVotes).length;
+  return (
+    view.roundNumber * 1_000_000 +
+    phaseProgress[view.phase] * 10_000 +
+    stageProgress * 1_000 +
+    view.clues.length * 100 +
+    voteCount
+  );
+}
+
+function newerView(
+  current: PrivateGameView | null,
+  candidate: PrivateGameView,
+): PrivateGameView {
+  if (!current || viewProgress(candidate) > viewProgress(current)) {
+    return candidate;
+  }
+  return current;
+}
+
 type LiveSetup =
   | { status: "loading" }
   | { status: "fallback" }
@@ -413,8 +443,10 @@ function LiveLobby({
                     </span>
                     <div>
                       <strong>
-                        {participant.alias}
-                        {participant.isYou ? " (tu)" : ""}
+                        {displayAlias(
+                          participant.alias,
+                          Boolean(participant.isYou),
+                        )}
                       </strong>
                       <small>
                         <i className={`activity-dot ${participant.activity}`} />
@@ -472,7 +504,7 @@ function LiveRoundRoom({
       metadata: profile ? { ...profile, activity: "idle", isHost } : {},
       onMessage: (message) => {
         const next = readLiveMatchView(message.content);
-        if (next) setLiveView(next);
+        if (next) setLiveView((current) => newerView(current, next));
       },
     });
 
@@ -480,10 +512,11 @@ function LiveRoundRoom({
     setIsHost(lobbyConfig.isHost);
   }, [lobbyConfig.isHost]);
 
-  let view: PrivateGameView | null = liveView ?? readLiveMatchView(ext?.match);
+  let view: PrivateGameView | null = readLiveMatchView(ext?.match);
+  if (liveView) view = newerView(view, liveView);
   for (const message of messages) {
     const next = readLiveMatchView(message.content);
-    if (next) view = next;
+    if (next) view = newerView(view, next);
   }
 
   const hasMatchView = view !== null;
@@ -546,8 +579,9 @@ function LiveRoundRoom({
           const result = (await response.json().catch(() => null)) as {
             view?: PrivateGameView;
           } | null;
-          if (result?.view) {
-            setLiveView(result.view);
+          const nextView = result?.view;
+          if (nextView) {
+            setLiveView((current) => newerView(current, nextView));
           }
         }
       });
@@ -613,8 +647,9 @@ function LiveRoundRoom({
       setActionError(result?.error ?? "No se pudo procesar la accion.");
       return;
     }
-    if (result?.view) {
-      setLiveView(result.view);
+    const nextView = result?.view;
+    if (nextView) {
+      setLiveView((current) => newerView(current, nextView));
     }
   };
   const submitActionEvent = useEffectEvent(submitAction);
@@ -888,12 +923,16 @@ function LiveRoundRoom({
               stage={stage}
               participantList={participants}
               clues={maskedClues}
+              secondsRemaining={
+                view.phaseDeadlineAt
+                  ? Math.max(0, Math.ceil((view.phaseDeadlineAt - now) / 1000))
+                  : 0
+              }
               selected={selectedVote}
               submitted={Boolean(sentVotes[stage] || view.ownVotes[stage])}
               votes={{}}
               onSelect={setSelectedVote}
               onSubmit={() => void submitVote()}
-              onContinue={() => undefined}
             />
           ) : null}
           {view.phase === "reveal" ? (
@@ -902,6 +941,7 @@ function LiveRoundRoom({
               impostorId={view.impostorId}
               voteTally={view.voteTally}
               impostorVoteTally={view.impostorVoteTally}
+              abstentions={view.abstentions}
               participants={participants}
               onResults={() => void submit(liveAction("show_results"))}
             />
@@ -940,8 +980,10 @@ function LiveRoundRoom({
                 </span>
                 <div>
                   <strong>
-                    {participant.alias}
-                    {participant.isYou ? " (tu)" : ""}
+                    {displayAlias(
+                      participant.alias,
+                      Boolean(participant.isYou),
+                    )}
                   </strong>
                   <small>
                     <i className="activity-dot idle" /> Listo
@@ -954,6 +996,7 @@ function LiveRoundRoom({
             <Shield size={17} />
             <span>Los roles y votos son privados hasta la revelacion.</span>
           </div>
+          {view.phase === "clue_phase" ? <GameRules /> : null}
         </aside>
       </div>
     </main>
@@ -962,7 +1005,7 @@ function LiveRoundRoom({
 
 function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
   const [phase, setPhase] = useState<MatchPhase>("lobby");
-  const [votingStage, setVotingStage] = useState<VotingStage>("ai_detection");
+  const votingStage: VotingStage = "ai_detection";
   const [clue, setClue] = useState("");
   const [submittedClue, setSubmittedClue] = useState<string | null>(null);
   const [clues, setClues] = useState<Array<{ alias: string; text: string }>>(
@@ -1045,15 +1088,12 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
               stage={votingStage}
               participantList={[]}
               clues={clues}
+              secondsRemaining={10}
               selected={selectedVote}
               submitted={voteSubmitted}
               votes={votes}
               onSelect={setSelectedVote}
               onSubmit={submitVote}
-              onContinue={() => {
-                if (votingStage === "ai_detection") setVotingStage("impostor");
-                else setPhase("reveal");
-              }}
             />
           ) : null}
           {phase === "reveal" ? (
@@ -1062,6 +1102,7 @@ function _DemoRoundRoom({ onLeave }: { onLeave: () => void }) {
               impostorId="demo-2"
               voteTally={{ "demo-1": 1 }}
               impostorVoteTally={{ "demo-2": 1 }}
+              abstentions={{ ai_detection: [], impostor: [] }}
               participants={[
                 {
                   id: "demo-1",
@@ -1163,25 +1204,6 @@ function CluePhase({
           <b>{secretWord ?? "Palabra privada protegida"}</b>
         </div>
       </div>
-      <div className="round-card rules-card">
-        <h3 className="rules-title">
-          <Sparkles size={16} /> Consejos de Juego
-        </h3>
-        <ul className="rules-list">
-          <li>
-            <strong>Civiles:</strong> Den una pista relacionada pero no
-            demasiado evidente.
-          </li>
-          <li>
-            <strong>Impostor:</strong> Mimetizate. Usa una palabra general que
-            parezca encajar con las demas.
-          </li>
-          <li>
-            <strong>Todos:</strong> 1 sola palabra. No repitas la pista de otra
-            persona.
-          </li>
-        </ul>
-      </div>
       <div className="round-card clue-card">
         <div className={`turn-status${isMyTurn ? " current" : ""}`}>
           <strong>{isMyTurn ? "TU TURNO" : "TURNO DEL JUGADOR"}</strong>
@@ -1228,21 +1250,52 @@ function CluePhase({
       </div>
       <div className="clue-list">
         <h3>Pistas en la mesa</h3>
-        {participants.map((participant) => {
-          const theirClue = clues.find((c) => c.alias === participant.alias);
-          if (!theirClue && participant.id !== activeTurnId) return null;
-          return (
-            <div className="clue-row" key={participant.alias}>
-              <strong>{participant.alias}</strong>
-              {theirClue ? (
-                <span>{theirClue.text}</span>
-              ) : (
-                <span className="thinking-dots">Escribiendo...</span>
-              )}
-            </div>
-          );
-        })}
+        {[...participants]
+          .sort((a, b) => {
+            const aIndex = clues.findIndex((clue) => clue.alias === a.alias);
+            const bIndex = clues.findIndex((clue) => clue.alias === b.alias);
+            return (
+              (aIndex === -1 ? clues.length : aIndex) -
+              (bIndex === -1 ? clues.length : bIndex)
+            );
+          })
+          .map((participant) => {
+            const theirClue = clues.find((c) => c.alias === participant.alias);
+            if (!theirClue && participant.id !== activeTurnId) return null;
+            return (
+              <div className="clue-row" key={participant.alias}>
+                <strong>{participant.alias}</strong>
+                {theirClue ? (
+                  <span>{theirClue.text}</span>
+                ) : (
+                  <span className="thinking-dots">Escribiendo...</span>
+                )}
+              </div>
+            );
+          })}
       </div>
+    </div>
+  );
+}
+
+function GameRules() {
+  return (
+    <div className="round-card rules-card">
+      <h3 className="rules-title">
+        <Sparkles size={16} /> Consejos de juego
+      </h3>
+      <ul className="rules-list">
+        <li>
+          <strong>Civiles:</strong> Da una pista relacionada, pero no demasiado
+          evidente.
+        </li>
+        <li>
+          <strong>Impostor:</strong> Mimetizate con una palabra que encaje.
+        </li>
+        <li>
+          <strong>Todos:</strong> Una sola palabra. No repitas otra pista.
+        </li>
+      </ul>
     </div>
   );
 }
@@ -1251,32 +1304,34 @@ function Voting({
   stage,
   participantList,
   clues,
+  secondsRemaining,
   selected,
   submitted,
   votes,
   onSelect,
   onSubmit,
-  onContinue,
 }: {
   stage: VotingStage;
   participantList: readonly RoundParticipant[];
   clues: readonly { alias: string; text: string }[];
+  secondsRemaining: number;
   selected: string | null;
   submitted: boolean;
   votes: Partial<Record<VotingStage, string>>;
   onSelect: (id: string) => void;
   onSubmit: () => void;
-  onContinue: () => void;
 }) {
+  const isAiVote = stage === "ai_detection";
+  const isExpired = secondsRemaining <= 0;
   return (
     <div className="phase-stack">
       <div className="vote-stepper">
         <span className="done">
-          1 <small>IA</small>
+          1 <small>Detectar IA</small>
         </span>
         <i />
         <span className={stage === "impostor" ? "active" : ""}>
-          2 <small>Impostor</small>
+          2 <small>Detectar impostor</small>
         </span>
       </div>
       <div className="round-card voting-clues">
@@ -1298,7 +1353,14 @@ function Voting({
           Votacion {stage === "ai_detection" ? "1 de 2" : "2 de 2"}
         </p>
         <h2>{votingTitle(stage)}</h2>
-        <p>Tu voto es privado y no se puede cambiar.</p>
+        <p>
+          {isAiVote
+            ? "Elige al jugador que crees que es la IA."
+            : "Elige al jugador que crees que no recibio la palabra secreta."}
+        </p>
+        <p className="vote-privacy-note">
+          Tu voto es privado y no se puede cambiar.
+        </p>
         <div className="vote-options">
           {participantList.map((participant) => (
             <button
@@ -1308,7 +1370,7 @@ function Voting({
                   ? "vote-option selected"
                   : "vote-option"
               }
-              disabled={submitted}
+              disabled={submitted || isExpired}
               onClick={() => onSelect(participant.id)}
               key={participant.id}
             >
@@ -1326,16 +1388,15 @@ function Voting({
         <button
           type="button"
           className="round-primary"
-          disabled={!selected || submitted}
+          disabled={!selected || submitted || isExpired}
           onClick={onSubmit}
         >
           {submitted ? "Voto enviado" : "Confirmar voto"}
         </button>
-        {submitted ? (
-          <button type="button" className="text-button" onClick={onContinue}>
-            {stage === "ai_detection" ? "Siguiente votacion" : "Ver resultado"}{" "}
-            <Target size={16} />
-          </button>
+        {isExpired && !submitted ? (
+          <p className="vote-waiting">Tiempo agotado. Sin voto.</p>
+        ) : submitted ? (
+          <p className="vote-waiting">Voto enviado. Esperando al resto...</p>
         ) : null}
       </div>
     </div>
@@ -1364,6 +1425,7 @@ function Reveal({
   impostorId,
   voteTally,
   impostorVoteTally,
+  abstentions,
   participants,
   onResults,
 }: {
@@ -1371,6 +1433,7 @@ function Reveal({
   impostorId?: string;
   voteTally?: Readonly<Record<string, number>>;
   impostorVoteTally?: Readonly<Record<string, number>>;
+  abstentions?: Readonly<Record<VotingStage, readonly string[]>>;
   participants: readonly RoundParticipant[];
   onResults: () => void;
 }) {
@@ -1382,6 +1445,15 @@ function Reveal({
 
   const aiCaught = caughtAiId === agentId && agentId != null;
   const impostorCaught = caughtImpostorId === impostorId && impostorId != null;
+  const abstentionNames = [
+    ...(abstentions?.ai_detection ?? []),
+    ...(abstentions?.impostor ?? []),
+  ]
+    .filter((id, index, ids) => ids.indexOf(id) === index)
+    .map(
+      (id) => participants.find((participant) => participant.id === id)?.alias,
+    )
+    .filter((alias): alias is string => Boolean(alias));
 
   return (
     <div className="round-card reveal-card">
@@ -1391,6 +1463,11 @@ function Reveal({
       <p className="eyebrow">Votacion cerrada</p>
       <h2>Roles revelados</h2>
       <p>La sala ha revelado las identidades de esta ronda.</p>
+      {abstentionNames.length > 0 ? (
+        <p className="abstention-note">
+          Sin voto: {abstentionNames.join(", ")}
+        </p>
+      ) : null}
       <div className="reveal-roles">
         <span>
           <b>IA</b>
